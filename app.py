@@ -6,7 +6,7 @@ import json
 from fpdf import FPDF
 
 # --- 1. ZUGANGSDATEN ---
-# Tipp: Nutze st.secrets für maximale Sicherheit auf GitHub!
+# HINWEIS: Bitte trage hier deine echten Daten aus dem Supabase-Dashboard ein!
 SUPABASE_URL = "https://sjviyysbjozculvslrdy.supabase.co"
 SUPABASE_KEY = "sb_publishable_Mlm0V-_soOU-G78EYcOWaw_-0we6oZw"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -34,7 +34,7 @@ def create_pdf(data, project_name, total_cost):
         pdf.ln(5)
     return bytes(pdf.output())
 
-st.set_page_config(page_title="WerkOS v1.5.2", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="WerkOS v1.5.3", page_icon="🏗️", layout="wide")
 st.title("🏗️ WerkOS")
 
 # --- 3. SIDEBAR: PROJEKT & BUDGET ---
@@ -112,3 +112,10 @@ with tab_main:
                     "content": speech_to_text(audio), "category": "Notiz", 
                     "status": "🟡 In Arbeit", "project_name": current_project, "is_completed": False
                 }).execute()
+                st.rerun()
+
+    st.divider()
+
+    # --- DATEN ANZEIGEN ---
+    st_filt = True if show_archived else False
+    res = supabase.table("notes").select("*").eq("is_completed", st_filt).eq("project_name", current_project
