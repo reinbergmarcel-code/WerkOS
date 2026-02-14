@@ -6,13 +6,14 @@ import json
 from fpdf import FPDF
 
 # --- 1. ZUGANGSDATEN ---
-# HINWEIS: Bitte trage hier deine echten Daten aus dem Supabase-Dashboard ein!
+# Trage hier deine Daten aus dem Supabase-Dashboard (Settings -> API) ein!
 SUPABASE_URL = "https://sjviyysbjozculvslrdy.supabase.co"
 SUPABASE_KEY = "sb_publishable_Mlm0V-_soOU-G78EYcOWaw_-0we6oZw"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def speech_to_text(audio_bytes):
-    return "Sprachaufnahme vom " + datetime.datetime.now().strftime('%H:%M')
+    now_str = datetime.datetime.now().strftime('%H:%M')
+    return f"Sprachaufnahme vom {now_str}"
 
 # --- 2. PDF EXPORT FUNKTION ---
 def create_pdf(data, project_name, total_cost):
@@ -26,15 +27,18 @@ def create_pdf(data, project_name, total_cost):
 
     for entry in data:
         pdf.set_font("Arial", "B", 11)
-        cost = f" | {entry.get('cost_amount', 0)} EUR" if entry.get('cost_amount') else ""
-        header = f"{entry.get('status')} | {entry.get('category')}{cost} ({entry.get('created_at', '')[:10]})"
+        cost_val = entry.get('cost_amount', 0)
+        cost_info = f" | {cost_val} EUR" if cost_val else ""
+        date_str = entry.get('created_at', '')[:10]
+        header = f"{entry.get('status')} | {entry.get('category')}{cost_info} ({date_str})"
         pdf.cell(190, 8, header.encode('latin-1', 'replace').decode('latin-1'), ln=True)
         pdf.set_font("Arial", "", 11)
-        pdf.multi_cell(190, 7, entry.get('content', '').encode('latin-1', 'replace').decode('latin-1'))
+        content_text = entry.get('content', '')
+        pdf.multi_cell(190, 7, content_text.encode('latin-1', 'replace').decode('latin-1'))
         pdf.ln(5)
     return bytes(pdf.output())
 
-st.set_page_config(page_title="WerkOS v1.5.4", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="WerkOS v1.5.5", page_icon="🏗️", layout="wide")
 st.title("🏗️ WerkOS")
 
 # --- 3. SIDEBAR: PROJEKT & BUDGET ---
@@ -94,4 +98,10 @@ with tab_main:
             if st.session_state.get("last_uploaded_img") != img_hash:
                 with st.spinner("Foto wird gespeichert..."):
                     try:
-                        fn = f"{datetime.datetime.now().strftime('%
+                        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                        fn = f"{timestamp}.jpg"
+                        supabase.storage.from_("werkos_fotos").upload(fn, img_file.getvalue())
+                        url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
+                        supabase.table("notes").insert({
+                            "content": "Foto-Notiz", "category": "Notiz", "status": "🟡 In Arbeit", 
+                            "project_name": current_project, "
