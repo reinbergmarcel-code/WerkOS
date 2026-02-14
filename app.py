@@ -6,7 +6,7 @@ import json
 from fpdf import FPDF
 
 # --- 1. ZUGANGSDATEN ---
-# Trage hier deine Daten aus dem Supabase-Dashboard (Settings -> API) ein!
+# Trage hier deine echten Daten aus Supabase ein!
 SUPABASE_URL = "https://sjviyysbjozculvslrdy.supabase.co"
 SUPABASE_KEY = "sb_publishable_Mlm0V-_soOU-G78EYcOWaw_-0we6oZw"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -38,7 +38,7 @@ def create_pdf(data, project_name, total_cost):
         pdf.ln(5)
     return bytes(pdf.output())
 
-st.set_page_config(page_title="WerkOS v1.5.5", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="WerkOS v1.5.6", page_icon="🏗️", layout="wide")
 st.title("🏗️ WerkOS")
 
 # --- 3. SIDEBAR: PROJEKT & BUDGET ---
@@ -54,7 +54,7 @@ new_p = st.sidebar.text_input("✨ Neue Baustelle anlegen:")
 if new_p: 
     current_project = new_p
 
-# Kosten berechnen für Sidebar
+# Kosten berechnen
 res_costs = supabase.table("notes").select("cost_amount").eq("project_name", current_project).execute()
 total_budget = sum([float(e['cost_amount']) for e in res_costs.data if e.get('cost_amount')])
 st.sidebar.metric("Projekt-Ausgaben", f"{total_budget:.2f} €")
@@ -63,7 +63,7 @@ st.sidebar.divider()
 filter_kat = st.sidebar.multiselect("Filter:", ["Notiz", "Aufgabe", "Material", "Wichtig"], default=["Notiz", "Aufgabe", "Material", "Wichtig"])
 show_archived = st.sidebar.checkbox("Archiv anzeigen")
 
-# --- 4. TABS: DASHBOARD vs. KALENDER ---
+# --- 4. TABS ---
 tab_main, tab_cal = st.tabs(["📋 Board", "📅 Termin-Planer"])
 
 with tab_main:
@@ -78,14 +78,16 @@ with tab_main:
             form_prio = c2.selectbox("Dringlichkeit:", ["🟢 Ok", "🟡 In Arbeit", "🔴 Dringend"], index=1)
             form_cost = c3.number_input("Kosten (€):", min_value=0.0, step=1.0)
             
-            material_items = st.text_area("Checkliste (nur Material, mit Komma trennen)") if form_kat == "Material" else ""
+            material_text = st.text_area("Checkliste (Material, mit Komma trennen)") if form_kat == "Material" else ""
             
             if st.form_submit_button("Speichern") and manual_text:
-                checklist_data = {i.strip(): False for i in material_items.split(",") if i.strip()} if material_items else None
                 supabase.table("notes").insert({
-                    "content": manual_text, "category": form_kat, "status": form_prio,
-                    "project_name": current_project, "cost_amount": form_cost,
-                    "checklist": json.dumps(checklist_data) if checklist_data else None, "is_completed": False
+                    "content": manual_text,
+                    "category": form_kat,
+                    "status": form_prio,
+                    "project_name": current_project,
+                    "cost_amount": form_cost,
+                    "is_completed": False
                 }).execute()
                 st.rerun()
 
@@ -101,7 +103,72 @@ with tab_main:
                         timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
                         fn = f"{timestamp}.jpg"
                         supabase.storage.from_("werkos_fotos").upload(fn, img_file.getvalue())
-                        url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
+                        img_url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
+                        
                         supabase.table("notes").insert({
-                            "content": "Foto-Notiz", "category": "Notiz", "status": "🟡 In Arbeit", 
-                            "project_name": current_project, "
+                            "content": "Foto-Notiz",
+                            "category": "Notiz",
+                            "status": "🟡 In Arbeit",
+                            "project_name": current_project,
+                            "image_url": img_url,
+                            "is_completed": False
+                        }).execute()
+                        
+                        st.session_state["last_uploaded_img"] = img_hash
+                        st.success("Foto gespeichert!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Fehler: {e}")
+        
+        audio = audio_recorder(text="", icon_size="2x", key="aud")
+        if audio:
+            with st.spinner("Sprache wird gespeichert..."):
+                supabase.table("notes").insert({
+                    "content": speech_to_text(audio),
+                    "category": "Notiz",
+                    "status": "🟡 In Arbeit",
+                    "project_name": current_project,
+                    "is_completed": False
+                }).execute()
+                st.rerun()
+
+    st.divider()
+
+    # --- DATEN ANZEIGEN ---
+    st_filt = True if show_archived else False
+    res = supabase.table("notes").select("*").eq("is_completed", st_filt).eq("project_name", current_project).in_("category", filter_kat).order("created_at", desc=True).execute()
+    
+    for entry in res.data:
+        eid = entry['id']
+        with st.container():
+            col_content, col_btns = st.columns([0.8, 0.2])
+            with col_content:
+                st.markdown(f"**{entry.get('status')} | {entry.get('category')} ({entry.get('cost_amount', 0)} €)**")
+                st.subheader(entry['content'])
+                if entry.get("image_url"):
+                    st.image(entry["image_url"], use_container_width=True)
+            
+            b1, b2, b3, _ = st.columns([0.1, 0.1, 0.1, 0.7])
+            if b1.button("✅" if not st_filt else "↩️", key=f"t_{eid}"):
+                supabase.table("notes").update({"is_completed": not st_filt}).eq("id", eid).execute()
+                st.rerun()
+            if b2.button("📝", key=f"e_{eid}"):
+                st.session_state[f"ed_{eid}"] = not st.session_state.get(f"ed_{eid}", False)
+            if b3.button("🗑️", key=f"d_{eid}"):
+                supabase.table("notes").delete().eq("id", eid).execute()
+                st.rerun()
+
+            if st.session_state.get(f"ed_{eid}", False):
+                new_s = st.radio("Status:", ["🟢 Ok", "🟡 In Arbeit", "🔴 Dringend"], key=f"r_{eid}", horizontal=True)
+                new_c = st.number_input("Kosten:", value=float(entry.get('cost_amount', 0)), key=f"cost_{eid}")
+                if st.button("Update", key=f"s_{eid}"):
+                    supabase.table("notes").update({"status": new_s, "cost_amount": new_c}).eq("id", eid).execute()
+                    st.session_state[f"ed_{eid}"] = False
+                    st.rerun()
+            st.divider()
+
+with tab_cal:
+    st.subheader("📅 Zeitplan")
+    cal_res = supabase.table("notes").select("*").eq("project_name", current_project).neq("category", "Notiz").order("created_at", desc=False).execute()
+    if cal_res.data:
+        for e in cal_
