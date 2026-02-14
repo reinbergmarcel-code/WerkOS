@@ -6,7 +6,7 @@ import json
 from fpdf import FPDF
 
 # --- 1. ZUGANGSDATEN ---
-# Tipp: Ersetze diese später durch st.secrets für mehr Sicherheit!
+# Tipp: Nutze st.secrets für maximale Sicherheit auf GitHub!
 SUPABASE_URL = "https://sjviyysbjozculvslrdy.supabase.co"
 SUPABASE_KEY = "DEIN_API_KEY"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
@@ -35,6 +35,7 @@ def create_pdf(data, project_name, total_cost):
     return bytes(pdf.output())
 
 st.set_page_config(page_title="WerkOS v1.5.2", page_icon="🏗️", layout="wide")
+st.title("🏗️ WerkOS")
 
 # --- 3. SIDEBAR: PROJEKT & BUDGET ---
 st.sidebar.header("📁 Projekt-Verwaltung")
@@ -86,11 +87,10 @@ with tab_main:
         st.write("### 📸 Foto / 🎤 Audio")
         img_file = st.camera_input("Foto aufnehmen", key="cam")
         
-        # Foto-Upload mit Schutz vor Endlosschleife
         if img_file:
             img_hash = f"img_{img_file.size}" 
             if st.session_state.get("last_uploaded_img") != img_hash:
-                with st.spinner("Foto wird hochgeladen..."):
+                with st.spinner("Foto wird gespeichert..."):
                     try:
                         fn = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
                         supabase.storage.from_("werkos_fotos").upload(fn, img_file.getvalue())
@@ -100,4 +100,15 @@ with tab_main:
                             "project_name": current_project, "image_url": url, "is_completed": False
                         }).execute()
                         st.session_state["last_uploaded_img"] = img_hash
-                        st.success("
+                        st.success("Foto gespeichert!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Upload-Fehler: {e}")
+        
+        audio = audio_recorder(text="", icon_size="2x", key="aud")
+        if audio:
+            with st.spinner("Sprachnotiz wird gespeichert..."):
+                supabase.table("notes").insert({
+                    "content": speech_to_text(audio), "category": "Notiz", 
+                    "status": "🟡 In Arbeit", "project_name": current_project, "is_completed": False
+                }).execute()
