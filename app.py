@@ -34,7 +34,7 @@ def create_pdf(data, project_name, total_cost):
         pdf.ln(5)
     return bytes(pdf.output())
 
-st.set_page_config(page_title="WerkOS v1.5.3", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="WerkOS v1.5.4", page_icon="🏗️", layout="wide")
 st.title("🏗️ WerkOS")
 
 # --- 3. SIDEBAR: PROJEKT & BUDGET ---
@@ -42,11 +42,13 @@ st.sidebar.header("📁 Projekt-Verwaltung")
 try:
     all_p = supabase.table("notes").select("project_name").execute()
     existing_projects = sorted(list(set([e['project_name'] for e in all_p.data if e.get('project_name')])))
-except: existing_projects = ["Allgemein"]
+except: 
+    existing_projects = ["Allgemein"]
 
 current_project = st.sidebar.selectbox("Baustelle wählen:", existing_projects)
 new_p = st.sidebar.text_input("✨ Neue Baustelle anlegen:")
-if new_p: current_project = new_p
+if new_p: 
+    current_project = new_p
 
 # Kosten berechnen für Sidebar
 res_costs = supabase.table("notes").select("cost_amount").eq("project_name", current_project).execute()
@@ -92,30 +94,4 @@ with tab_main:
             if st.session_state.get("last_uploaded_img") != img_hash:
                 with st.spinner("Foto wird gespeichert..."):
                     try:
-                        fn = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                        supabase.storage.from_("werkos_fotos").upload(fn, img_file.getvalue())
-                        url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
-                        supabase.table("notes").insert({
-                            "content": "Foto-Notiz", "category": "Notiz", "status": "🟡 In Arbeit", 
-                            "project_name": current_project, "image_url": url, "is_completed": False
-                        }).execute()
-                        st.session_state["last_uploaded_img"] = img_hash
-                        st.success("Foto gespeichert!")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Upload-Fehler: {e}")
-        
-        audio = audio_recorder(text="", icon_size="2x", key="aud")
-        if audio:
-            with st.spinner("Sprachnotiz wird gespeichert..."):
-                supabase.table("notes").insert({
-                    "content": speech_to_text(audio), "category": "Notiz", 
-                    "status": "🟡 In Arbeit", "project_name": current_project, "is_completed": False
-                }).execute()
-                st.rerun()
-
-    st.divider()
-
-    # --- DATEN ANZEIGEN ---
-    st_filt = True if show_archived else False
-    res = supabase.table("notes").select("*").eq("is_completed", st_filt).eq("project_name", current_project
+                        fn = f"{datetime.datetime.now().strftime('%
