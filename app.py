@@ -8,7 +8,7 @@ from fpdf import FPDF
 # --- 1. ZUGANGSDATEN ---
 # Tipp: Nutze st.secrets für maximale Sicherheit auf GitHub!
 SUPABASE_URL = "https://sjviyysbjozculvslrdy.supabase.co"
-SUPABASE_KEY = "DEIN_API_KEY"
+SUPABASE_KEY = "sb_publishable_Mlm0V-_soOU-G78EYcOWaw_-0we6oZw"
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def speech_to_text(audio_bytes):
