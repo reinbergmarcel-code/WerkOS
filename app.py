@@ -4,7 +4,7 @@ from supabase import create_client
 import datetime
 import pandas as pd
 
-# --- 1. APP CONFIG & STYLING (v2.27 + Archiv Logik) ---
+# --- 1. APP CONFIG & STYLING (v2.28 Fix + Button Sichtbarkeit) ---
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
 st.markdown("""
@@ -41,8 +41,6 @@ st.markdown("""
         color: #1e293b !important;
     }
     
-    .card strong { color: #1e3a8a !important; }
-    
     header {visibility: hidden;}
     footer {visibility: hidden;}
 
@@ -69,7 +67,6 @@ except:
 
 if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
-if 'show_archived' not in st.session_state: st.session_state.show_archived = False
 
 # --- HEADER & BACK ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1><p>Digitales Baustellenmanagement</p></div>""", unsafe_allow_html=True)
@@ -79,45 +76,48 @@ if st.session_state.page != "🏠 Home":
         st.session_state.page = "🏠 Home"
         st.rerun()
 
-# --- PROJEKT-VERWALTUNG MIT ARCHIV ---
-# Wir nutzen eine Hilfsabfrage, um den Archiv-Status der Projekte zu kennen
-# In unserem Schema nutzen wir einen speziellen Eintrag pro Projekt ("_status_"), um den Archiv-Status zu speichern
+# --- PROJEKT-DATEN LADEN ---
 p_data = supabase.table("notes").select("project_name, content").execute()
 all_projects = list(set([e['project_name'] for e in p_data.data if e.get('project_name')]))
-
-# Finde heraus, welche Projekte archiviert sind (Content == "ARCHIVED")
 archived_projects = list(set([e['project_name'] for e in p_data.data if e['content'] == "PROJECT_ARCHIVED"]))
 active_projects = [p for p in all_projects if p not in archived_projects]
 
-c_top1, c_top2, c_top3 = st.columns([2,1,1])
+# --- PROJEKT-STEUERUNG (NEU GESTALTET) ---
+c1, c2 = st.columns([3, 1])
 
-with c_top1:
-    display_list = active_projects if not st.session_state.show_archived else all_projects
-    curr_p = st.selectbox("📍 Baustelle:", sorted(display_list) if display_list else ["Allgemein"])
+with c1:
+    show_archived = st.checkbox("Archivierte Projekte einblenden", value=False)
+    display_list = all_projects if show_archived else active_projects
+    curr_p = st.selectbox("📍 Aktuelles Projekt:", sorted(display_list) if display_list else ["Allgemein"])
 
-with c_top2:
-    with st.popover("➕ Projekt"):
-        new_p = st.text_input("Projektname:")
-        if st.button("Anlegen"):
+with c2:
+    with st.popover("⚙️ Verwaltung"):
+        st.write("**Neues Projekt:**")
+        new_p = st.text_input("Name eingeben:")
+        if st.button("Projekt anlegen"):
             if new_p:
                 supabase.table("notes").insert({"content": "Projektstart", "project_name": new_p, "category": "Notiz", "is_completed": False}).execute()
                 st.rerun()
+        
+        st.divider()
+        
+        if curr_p and curr_p != "Allgemein":
+            if curr_p not in archived_projects:
+                st.write(f"**{curr_p} abschließen:**")
+                if st.button("📁 Jetzt Archivieren"):
+                    supabase.table("notes").insert({"content": "PROJECT_ARCHIVED", "project_name": curr_p, "category": "System", "is_completed": True}).execute()
+                    st.rerun()
+            else:
+                st.write(f"**{curr_p} reaktivieren:**")
+                if st.button("🔓 Aus Archiv holen"):
+                    supabase.table("notes").delete().eq("project_name", curr_p).eq("content", "PROJECT_ARCHIVED").execute()
+                    st.rerun()
 
-with c_top3:
-    if curr_p and curr_p != "Allgemein" and curr_p not in archived_projects:
-        if st.button("📁 Archivieren"):
-            supabase.table("notes").insert({"content": "PROJECT_ARCHIVED", "project_name": curr_p, "category": "System", "is_completed": True}).execute()
-            st.rerun()
-    elif curr_p in archived_projects:
-        st.info("Projekt archiviert")
-        if st.button("🔓 Reaktivieren"):
-            supabase.table("notes").delete().eq("project_name", curr_p).eq("content", "PROJECT_ARCHIVED").execute()
-            st.rerun()
-
-st.checkbox("Archivierte Projekte anzeigen", key="show_archived")
 st.divider()
 
-# --- SEITEN LOGIK ---
+# --- SEITEN LOGIK (BOARD, LAGER, ZEITEN) ---
+is_archived = curr_p in archived_projects
+
 if st.session_state.page == "🏠 Home":
     col1, col2 = st.columns(2)
     with col1:
@@ -136,8 +136,8 @@ elif st.session_state.page == "📊 Dashboard":
         st.bar_chart(df.groupby('category')['cost_amount'].sum())
 
 elif st.session_state.page == "📋 Board":
-    if curr_p in archived_projects:
-        st.warning("Dieses Projekt ist archiviert. Bearbeitung deaktiviert.")
+    if is_archived:
+        st.warning("⚠️ Dieses Projekt ist archiviert. Keine neuen Einträge möglich.")
     else:
         with st.expander("➕ NEUER EINTRAG / FOTO / AUDIO"):
             with st.form("new_e"):
@@ -156,16 +156,14 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
                 st.rerun()
 
-            st.markdown("---")
             st.write("🎤 Sprachnotiz:")
-            audio_data = audio_recorder(text="Aufnahme", icon_size="3x", key="audio_v28")
-            if audio_data:
-                if st.button("💾 AUDIO SPEICHERN"):
-                    afn = f"rec_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
-                    supabase.storage.from_("werkos_fotos").upload(afn, audio_data)
-                    a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
-                    supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
-                    st.rerun()
+            audio_data = audio_recorder(text="Aufnahme", icon_size="3x", key="audio_v29")
+            if audio_data and st.button("💾 AUDIO SPEICHERN"):
+                afn = f"rec_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
+                supabase.storage.from_("werkos_fotos").upload(afn, audio_data)
+                a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
+                supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
+                st.rerun()
 
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).neq("content", "PROJECT_ARCHIVED").order("created_at", desc=True).execute()
     for e in res.data:
@@ -182,7 +180,7 @@ elif st.session_state.page == "📋 Board":
             st.markdown(f"""<div class="card {cat_class}"><strong>{e['category']}</strong><div style="margin-top:5px;">{e['content']}</div><div style="font-size:0.85rem;margin-top:5px;color:#64748b;">💰 {e.get('cost_amount',0)} €</div></div>""", unsafe_allow_html=True)
             if e.get("image_url"): st.image(e["image_url"])
             if e.get("audio_url"): st.audio(e["audio_url"])
-            if curr_p not in archived_projects:
+            if not is_archived:
                 c1, c2, c3 = st.columns(3)
                 if c1.button("✅", key=f"d_{e['id']}"):
                     supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute(); st.rerun()
@@ -203,7 +201,7 @@ elif st.session_state.page == "📦 Lager":
                 supabase.table("materials").update({"stock_quantity": new_q}).eq("id", info['id']).execute()
                 st.rerun()
     with st.expander("📤 VERBRAUCH BUCHEN"):
-        if curr_p in archived_projects: st.error("Projekt archiviert.")
+        if is_archived: st.error("Projekt archiviert.")
         else:
             with st.form("m_book"):
                 sel = st.selectbox("Material:", [i['name'] for i in m_res.data])
@@ -218,7 +216,7 @@ elif st.session_state.page == "📦 Lager":
 
 elif st.session_state.page == "⏱️ Zeiten":
     st.markdown("### ⏱️ Zeiten")
-    if curr_p in archived_projects: st.error("Projekt archiviert.")
+    if is_archived: st.error("Projekt archiviert.")
     else:
         s_res = supabase.table("staff").select("*").execute()
         if s_res.data:
