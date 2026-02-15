@@ -128,7 +128,7 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
                 st.rerun()
         
-        # FOTO-FUNKTION
+        # FOTO
         img = st.camera_input("Kamera")
         if img:
             fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
@@ -137,15 +137,20 @@ elif st.session_state.page == "📋 Board":
             supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
             st.rerun()
 
-        # AUDIO-FUNKTION (REINSTALLLIERT)
+        # AUDIO (ROBUSTE VERSION)
         st.write("🎤 Sprachnotiz:")
-        audio_bytes = audio_recorder(text="", icon_size="2x")
-        if audio_bytes:
-            afn = f"audio_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
-            supabase.storage.from_("werkos_fotos").upload(afn, audio_bytes)
-            a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
-            supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
-            st.rerun()
+        try:
+            audio_bytes = audio_recorder(text="Tippen zum Aufnehmen", recording_color="#e74c3c", neutral_color="#1e3a8a", icon_size="2x", key="recorder_fixed")
+            if audio_bytes:
+                st.audio(audio_bytes, format="audio/wav")
+                if st.button("🎤 AUFNAHME SPEICHERN", key="save_audio"):
+                    afn = f"audio_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
+                    supabase.storage.from_("werkos_fotos").upload(afn, audio_bytes)
+                    a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
+                    supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
+                    st.rerun()
+        except Exception as e:
+            st.error(f"Fehler: {e}")
 
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
@@ -173,7 +178,6 @@ elif st.session_state.page == "📋 Board":
                 st.rerun()
 
 elif st.session_state.page == "📦 Lager":
-    # ... Rest des Codes bleibt identisch wie in v2.6/v2.14 ...
     st.markdown("### 📦 Lager")
     with st.expander("➕ NEUES MATERIAL ANLEGEN"):
         with st.form("m_add"):
