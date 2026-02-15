@@ -5,117 +5,143 @@ import datetime
 import pandas as pd
 
 # =========================================================
-# I. BACKEND - DIE UNANTASTBARE LOGIK (VOLLSTÄNDIG)
+# I. BACKEND - DIE UNANTASTBARE LOGIK-ZENTRALE
 # =========================================================
-try:
-    S_URL, S_KEY = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
-    supabase = create_client(S_URL, S_KEY)
-except:
-    st.error("Verbindung zu Supabase fehlgeschlagen."); st.stop()
+class WerkOS_Backend:
+    def __init__(self):
+        try:
+            self.db = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+        except:
+            st.error("Datenbank-Fehler")
 
-def db_get_all_data():
-    return supabase.table("notes").select("*").execute()
+    def get_data(self):
+        return self.db.table("notes").select("*").execute().data
 
-def db_insert_note(content, category, project, cost=0.0):
-    supabase.table("notes").insert({
-        "content": content, "category": category, 
-        "project_name": project, "cost_amount": cost, "is_completed": False
-    }).execute()
+    def create_project(self, name):
+        self.db.table("notes").insert({"content": "Start", "project_name": name, "category": "Notiz", "is_completed": False}).execute()
+
+    def archive_project(self, name):
+        self.db.table("notes").insert({"content": "PROJECT_ARCHIVED", "project_name": name, "category": "System", "is_completed": True}).execute()
+
+    def delete_archive_marker(self, name):
+        self.db.table("notes").delete().eq("project_name", name).eq("content", "PROJECT_ARCHIVED").execute()
+
+    def update_note(self, note_id, new_content):
+        self.db.table("notes").update({"content": new_content}).eq("id", note_id).execute()
+
+    def complete_note(self, note_id):
+        self.db.table("notes").update({"is_completed": True}).eq("id", note_id).execute()
+
+    def delete_note(self, note_id):
+        self.db.table("notes").delete().eq("id", note_id).execute()
+
+backend = WerkOS_Backend()
 
 # =========================================================
-# II. FRONTEND - DAS DESIGN & UI (v2.43)
+# II. FRONTEND - DAS REPARIERTE APP-INTERFACE (v2.45)
 # =========================================================
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
+# Minimales CSS NUR für die Karten-Farben, um nichts zu "zerschießen"
 st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; background-color: #F8FAFC; color: #1e293b; }
-    .app-header { background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%); padding: 20px; border-radius: 0 0 25px 25px; color: white; text-align: center; margin-bottom: 20px; }
-    .stButton>button { border-radius: 12px !important; font-weight: 700 !important; color: #1e293b !important; background-color: white !important; border: 1px solid #cbd5e1 !important; }
-    .card { background: white !important; padding: 20px; border-radius: 20px; margin-bottom: 15px; border: 1px solid #e2e8f0; }
-    .card-notiz { border-left: 10px solid #3b82f6; }
-    .card-aufgabe { border-left: 10px solid #f59e0b; }
-    .card-wichtig { border-left: 10px solid #ef4444; }
+    .card { padding: 15px; border-radius: 15px; margin-bottom: 10px; border: 1px solid #ddd; background: white; color: black; }
+    .notiz { border-left: 10px solid #3498db; }
+    .aufgabe { border-left: 10px solid #f1c40f; }
+    .wichtig { border-left: 10px solid #e74c3c; }
+    .material { border-left: 10px solid #95a5a6; }
     </style>
-    """, unsafe_allow_html=True)
+""", unsafe_allow_html=True)
 
 if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 
-st.markdown('<div class="app-header"><h1>WerkOS Pro</h1></div>', unsafe_allow_html=True)
+st.title("WerkOS Pro")
 
-# PROJEKT-STEUERUNG
-data_res = db_get_all_data()
-all_data = data_res.data if data_res.data else []
-all_p = sorted(list(set([e['project_name'] for e in all_data if e.get('project_name')])))
-arch_p = list(set([e['project_name'] for e in all_data if e['content'] == "PROJECT_ARCHIVED"]))
+# 1. PROJEKT-VERWALTUNG
+all_data = backend.get_data()
+all_projects = sorted(list(set([e['project_name'] for e in all_data if e.get('project_name')])))
+archived_projects = list(set([e['project_name'] for e in all_data if e['content'] == "PROJECT_ARCHIVED"]))
 
-col1, col2 = st.columns([4, 1])
-with col1:
-    curr_p = st.selectbox("📍 Baustelle", [p for p in all_p if p not in arch_p] if not st.checkbox("Archiv") else all_p, label_visibility="collapsed")
-with col2:
-    with st.popover("➕"):
-        new_p = st.text_input("Name:")
-        if st.button("ANLEGEN"):
-            if new_p: db_insert_note("Start", "Notiz", new_p); st.rerun()
+c_sel, c_add = st.columns([3, 1])
+with c_sel:
+    show_arch = st.checkbox("Archiv anzeigen")
+    curr_p = st.selectbox("📌 Projekt", [p for p in all_projects if p not in archived_projects] if not show_arch else all_projects)
+with c_add:
+    with st.popover("➕ Neu"):
+        np = st.text_input("Name:")
+        if st.button("Anlegen"):
+            if np: backend.create_project(np); st.rerun()
 
-is_archived = curr_p in arch_p
+is_archived = curr_p in archived_projects
+
+# ARCHIV-LOGIK BUTTONS
+if curr_p and curr_p != "Allgemein":
+    if not is_archived:
+        if st.button(f"📁 '{curr_p}' ARCHIVIEREN", use_container_width=True):
+            backend.archive_project(curr_p); st.rerun()
+    else:
+        if st.button(f"🔓 '{curr_p}' REAKTIVIEREN", use_container_width=True):
+            backend.delete_archive_marker(curr_p); st.rerun()
+
 st.divider()
 
-if st.session_state.page != "🏠 Home":
-    if st.button("⬅️ MENÜ", use_container_width=True): st.session_state.page = "🏠 Home"; st.rerun()
-
-# --- SEITEN ---
+# 2. SEITEN-NAVIGATION
 if st.session_state.page == "🏠 Home":
-    c1, c2 = st.columns(2)
-    if c1.button("📋 BOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
-    if c1.button("📦 LAGER", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
-    if c2.button("⏱️ ZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
-    if c2.button("📊 STATS", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
+    col1, col2 = st.columns(2)
+    if col1.button("📋 BOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
+    if col1.button("📦 LAGER", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
+    if col2.button("⏱️ ZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
+    if col2.button("📊 STATS", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
 
 elif st.session_state.page == "📋 Board":
-    if not is_archived:
-        with st.expander("➕ NEUER EINTRAG (Audio/Foto)"):
-            audio_bytes = audio_recorder(text="Klicken zum Sprechen", icon_size="2x")
-            img_file = st.camera_input("Foto aufnehmen")
-            with st.form("board_f"):
-                t = st.text_input("Notiz/Aufgabe")
-                k = st.selectbox("Typ", ["Notiz", "Aufgabe", "Wichtig"])
-                c = st.number_input("Kosten €", step=1.0)
-                if st.form_submit_button("SPEICHERN"):
-                    db_insert_note(t, k, curr_p, c); st.rerun()
+    if st.button("⬅️ ZURÜCK"): st.session_state.page = "🏠 Home"; st.rerun()
     
-    res = [e for e in all_data if e['project_name'] == curr_p and not e['is_completed'] and e['content'] != "PROJECT_ARCHIVED"]
-    for e in res:
+    if not is_archived:
+        with st.expander("➕ NEUER EINTRAG"):
+            audio_recorder(text="Sprachnotiz")
+            st.camera_input("Foto")
+            with st.form("new"):
+                t = st.text_input("Inhalt")
+                k = st.selectbox("Typ", ["Notiz", "Aufgabe", "Wichtig"])
+                c = st.number_input("Kosten €", step=0.5)
+                if st.form_submit_button("SPEICHERN"):
+                    backend.db.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute(); st.rerun()
+
+    # Board Anzeige
+    items = [e for e in all_data if e['project_name'] == curr_p and not e['is_completed'] and e['content'] != "PROJECT_ARCHIVED"]
+    for e in items:
         if st.session_state.edit_id == e['id']:
             with st.form(f"edit_{e['id']}"):
-                new_t = st.text_input("Text ändern", value=e['content'])
-                if st.form_submit_button("SICHERN"):
-                    supabase.table("notes").update({"content": new_t}).eq("id", e['id']).execute()
-                    st.session_state.edit_id = None; st.rerun()
+                nt = st.text_input("Ändern", value=e['content'])
+                if st.form_submit_button("Sichern"):
+                    backend.update_note(e['id'], nt); st.session_state.edit_id = None; st.rerun()
         else:
-            st.markdown(f'<div class="card card-{e["category"].lower()}"><b>{e["category"]}</b><br>{e["content"]}<br>💰 {e.get("cost_amount",0):.2f} €</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="card {e["category"].lower()}"><b>{e["category"]}</b><br>{e["content"]}<br><small>💰 {e.get("cost_amount",0)}€</small></div>', unsafe_allow_html=True)
             if not is_archived:
                 b1, b2, b3 = st.columns(3)
-                if b1.button("✅", key=f"d_{e['id']}"): supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute(); st.rerun()
+                if b1.button("✅", key=f"d_{e['id']}"): backend.complete_note(e['id']); st.rerun()
                 if b2.button("✏️", key=f"e_{e['id']}"): st.session_state.edit_id = e['id']; st.rerun()
-                if b3.button("🗑️", key=f"x_{e['id']}"): supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
+                if b3.button("🗑️", key=f"x_{e['id']}"): backend.delete_note(e['id']); st.rerun()
 
 elif st.session_state.page == "📦 Lager":
-    m_res = supabase.table("materials").select("*").execute().data
+    if st.button("⬅️ ZURÜCK"): st.session_state.page = "🏠 Home"; st.rerun()
+    m_data = backend.db.table("materials").select("*").execute().data
     t1, t2 = st.tabs(["📥 Inventur", "📤 Verbrauch"])
     with t1:
         with st.form("inv"):
-            sel = st.selectbox("Mat", [i['name'] for i in m_res]); q = st.number_input("Bestand")
-            if st.form_submit_button("OK"):
-                idx = next(i for i in m_res if i['name'] == sel)['id']
-                supabase.table("materials").update({"stock_quantity": q}).eq("id", idx).execute(); st.rerun()
+            sel = st.selectbox("Material", [i['name'] for i in m_data])
+            q = st.number_input("Bestand")
+            if st.form_submit_button("Korrektur"):
+                mid = next(i for i in m_data if i['name'] == sel)['id']
+                backend.db.table("materials").update({"stock_quantity": q}).eq("id", mid).execute(); st.rerun()
     with t2:
         if not is_archived:
             with st.form("cons"):
-                sel = st.selectbox("Mat", [i['name'] for i in m_res]); q = st.number_input("Menge")
-                if st.form_submit_button("VERBRAUCH BUCHEN"):
+                sel = st.selectbox("Material ", [i['name'] for i in m_data])
+                q = st.number_input("Menge")
+                if st.form_submit_button("Buchen"):
                     m = next(i for i in m_res if i['name'] == sel)
-                    db_insert_note(f"{q}x {sel}", "Material", curr_p, m['price_per_unit']*q)
-                    supabase.table("materials").update({"stock_quantity": float(m['stock_quantity'])-q}).eq("id", m['id']).execute(); st.rerun()
+                    backend.db.table("notes").insert({"content":f"{q}x {sel}", "category":"Material", "project_name":curr_p, "cost_amount":m['price_per_unit']*q, "is_completed":False}).execute()
+                    backend.db.table("materials").update({"stock_quantity": float(m['stock_quantity'])-q}).eq("id", m['id']).execute(); st.rerun()
+    for m in m_data: st.write(f"📦 {m['name']}: {m['stock_quantity']}")
