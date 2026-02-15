@@ -69,6 +69,17 @@ if new_p: current_project = new_p
 # --- SEITE 1: DASHBOARD ---
 if page == "📊 Dashboard":
     st.title(f"📊 Dashboard: {current_project}")
+    
+    # NEU: Lagerwarnung im Dashboard
+    m_check = supabase.table("materials").select("*").execute()
+    if m_check.data:
+        low_stock_items = [m for m in m_check.data if m.get('stock_quantity', 0) <= m.get('min_stock', 5)]
+        if low_stock_items:
+            st.warning(f"⚠️ **Lager-Warnung:** {len(low_stock_items)} Materialien sind fast leer!")
+            with st.expander("Details anzeigen"):
+                for l in low_stock_items:
+                    st.write(f"- {l['name']}: Nur noch {l['stock_quantity']} im Lager (Limit: {l['min_stock']})")
+
     res = supabase.table("notes").select("*").eq("project_name", current_project).execute()
     if res.data:
         df = pd.DataFrame(res.data)
@@ -81,11 +92,10 @@ if page == "📊 Dashboard":
         st.subheader("Kostenverteilung")
         chart_data = df.groupby('category')['cost_amount'].sum()
         st.bar_chart(chart_data)
-        
     else:
         st.info("Noch keine Daten für dieses Projekt vorhanden.")
 
-# --- SEITE 2: BOARD (Mit Kamera & Audio!) ---
+# --- SEITE 2: BOARD ---
 elif page == "📋 Board":
     st.subheader(f"Board: {current_project}")
     tab1, tab2 = st.tabs(["📋 Notizen & Media", "📅 Verlauf"])
@@ -140,15 +150,19 @@ elif page == "📦 Material & Lager":
             n = st.text_input("Name")
             p = st.number_input("Preis pro Einheit (€)", min_value=0.0)
             stock = st.number_input("Lagerbestand (Anfang)", min_value=0.0)
+            m_limit = st.number_input("Warnen bei Bestand unter...", min_value=0.0, value=5.0)
             if st.form_submit_button("Im Katalog speichern"):
-                supabase.table("materials").insert({"name": n, "price_per_unit": p, "stock_quantity": stock}).execute()
+                supabase.table("materials").insert({"name": n, "price_per_unit": p, "stock_quantity": stock, "min_stock": m_limit}).execute()
                 st.rerun()
     st.divider()
     m_res = supabase.table("materials").select("*").execute()
     if m_res.data:
-        m_df = pd.DataFrame(m_res.data)[['name', 'stock_quantity', 'price_per_unit']]
+        # Bestandsliste mit Warn-Emojis
+        m_df = pd.DataFrame(m_res.data)
+        m_df['Status'] = m_df.apply(lambda x: "⚠️ KNAPP" if x['stock_quantity'] <= x['min_stock'] else "✅ OK", axis=1)
         st.write("### Aktueller Bestand")
-        st.table(m_df)
+        st.table(m_df[['name', 'stock_quantity', 'min_stock', 'Status', 'price_per_unit']])
+        
         with st.form("book_mat"):
             sel = st.selectbox("Material entnehmen:", m_df['name'].tolist())
             qty = st.number_input("Menge:", min_value=1.0)
@@ -156,37 +170,4 @@ elif page == "📦 Material & Lager":
                 m_info = next(item for item in m_res.data if item['name'] == sel)
                 supabase.table("notes").insert({"content": f"{qty}x {sel}", "category": "Material", "project_name": current_project, "cost_amount": m_info['price_per_unit']*qty, "is_completed": False}).execute()
                 new_q = m_info['stock_quantity'] - qty
-                supabase.table("materials").update({"stock_quantity": new_q}).eq("id", m_info['id']).execute()
-                st.success("Bestand aktualisiert!")
-                st.rerun()
-    else: st.info("Katalog leer.")
-
-# --- SEITE 4: ZEIT ---
-elif page == "⏱️ Zeit":
-    st.subheader("⏱️ Zeiterfassung")
-    with st.expander("👤 Mitarbeiter anlegen"):
-        with st.form("new_staff"):
-            sn = st.text_input("Name")
-            sr = st.number_input("Stundensatz (€)", min_value=0.0, value=45.0)
-            if st.form_submit_button("Speichern"):
-                supabase.table("staff").insert({"name": sn, "hourly_rate": sr}).execute()
-                st.rerun()
-    st.divider()
-    st_res = supabase.table("staff").select("*").execute()
-    if st_res.data:
-        st_dict = {s['name']: s for s in st_res.data}
-        with st.form("book_time"):
-            sel_s = st.selectbox("Wer?", list(st_dict.keys()))
-            hrs = st.number_input("Stunden:", min_value=0.5, step=0.5)
-            if st.form_submit_button("Zeit buchen"):
-                s = st_dict[sel_s]
-                supabase.table("notes").insert({"content": f"{sel_s}: {hrs} Std.", "category": "Aufgabe", "project_name": current_project, "cost_amount": s['hourly_rate']*hrs, "is_completed": False}).execute()
-                st.success("Zeit gebucht!")
-                st.rerun()
-
-# --- PDF EXPORT SIDEBAR ---
-if st.sidebar.button("📄 Profi-PDF Bericht"):
-    pdf_res = supabase.table("notes").select("*").eq("project_name", current_project).execute()
-    total_val = sum([float(x['cost_amount']) for x in pdf_res.data if x.get('cost_amount')])
-    pdf_b = create_pdf(pdf_res.data, current_project, total_val)
-    st.sidebar.download_button("Download PDF", pdf_b, f"Bericht_{current_project}.pdf")
+                supabase.table("materials").update({"stock
