@@ -5,7 +5,7 @@ import datetime
 from fpdf import FPDF
 import pandas as pd
 
-# --- 1. APP CONFIG & ULTIMATE STYLING (EXAKT WIE GEWÜNSCHT) ---
+# --- 1. APP CONFIG & ORIGINAL STYLING ---
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
 st.markdown("""
@@ -45,15 +45,17 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
 
-    /* Spezifische Button-Farben */
+    /* Button-Farben */
     div.stButton > button[key^="d_"] { background-color: #2ecc71 !important; color: white !important; height: 3rem !important; }
     div.stButton > button[key^="e_"] { background-color: #f1c40f !important; color: black !important; height: 3rem !important; }
     div.stButton > button[key^="x_"] { background-color: #e74c3c !important; color: white !important; height: 3rem !important; }
-
-    /* NEU: Zwingt Navigations-Spalten am Handy nebeneinander */
-    [data-testid="column"] {
-        flex: 1 1 0% !important;
-        min-width: 0px !important;
+    
+    /* Rückweg-Button Styling */
+    div.stButton > button[key="back_to_menu"] { 
+        background-color: #1e3a8a !important; 
+        color: white !important; 
+        height: 3rem !important;
+        margin-bottom: 20px !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -77,20 +79,11 @@ if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 # --- HEADER ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1><p>Digitales Baustellenmanagement</p></div>""", unsafe_allow_html=True)
 
-# --- NEU: NAVIGATIONSRIHE ---
-nav = st.columns(5)
-with nav[0]: 
-    if st.button("🏠", key="nav_h"): st.session_state.page = "🏠 Home"; st.rerun()
-with nav[1]: 
-    if st.button("📊", key="nav_d"): st.session_state.page = "📊 Dashboard"; st.rerun()
-with nav[2]: 
-    if st.button("📋", key="nav_b"): st.session_state.page = "📋 Board"; st.rerun()
-with nav[3]: 
-    if st.button("📦", key="nav_l"): st.session_state.page = "📦 Lager"; st.rerun()
-with nav[4]: 
-    if st.button("⏱️", key="nav_z"): st.session_state.page = "⏱️ Zeiten"; st.rerun()
-
-st.divider()
+# --- NEUER RÜCKWEG-BUTTON (Nur wenn nicht auf Home) ---
+if st.session_state.page != "🏠 Home":
+    if st.button("⬅️ ZURÜCK ZUM MENÜ", key="back_to_menu", use_container_width=True):
+        st.session_state.page = "🏠 Home"
+        st.rerun()
 
 # Projektwahl
 p_res = supabase.table("notes").select("project_name").execute()
@@ -107,7 +100,9 @@ with c_top2:
                 supabase.table("notes").insert({"content": "Start", "project_name": new_p, "category": "Notiz", "is_completed": False}).execute()
                 st.rerun()
 
-# --- SEITE: HOME ---
+st.divider()
+
+# --- SEITEN LOGIK (EXAKT WIE IN v2.6) ---
 if st.session_state.page == "🏠 Home":
     col1, col2 = st.columns(2)
     with col1:
@@ -117,7 +112,6 @@ if st.session_state.page == "🏠 Home":
         if st.button("📋\nBOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
         if st.button("⏱️\nZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
 
-# --- SEITE: DASHBOARD ---
 elif st.session_state.page == "📊 Dashboard":
     st.markdown(f"### 📊 Dashboard: {curr_p}")
     res = supabase.table("notes").select("*").eq("project_name", curr_p).execute()
@@ -126,7 +120,6 @@ elif st.session_state.page == "📊 Dashboard":
         st.metric("Gesamtkosten", f"{df['cost_amount'].sum():.2f} €")
         st.bar_chart(df.groupby('category')['cost_amount'].sum())
 
-# --- SEITE: BOARD (ALLES WIEDER DA) ---
 elif st.session_state.page == "📋 Board":
     with st.expander("➕ NEUER EINTRAG / FOTO"):
         with st.form("new_e"):
@@ -168,7 +161,6 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").delete().eq("id", e['id']).execute()
                 st.rerun()
 
-# --- SEITE: LAGER (VOLLSTÄNDIG) ---
 elif st.session_state.page == "📦 Lager":
     st.markdown("### 📦 Lager")
     with st.expander("➕ NEUES MATERIAL ANLEGEN"):
@@ -191,7 +183,6 @@ elif st.session_state.page == "📦 Lager":
                 supabase.table("materials").update({"stock_quantity": float(info['stock_quantity'])-q}).eq("id", info['id']).execute()
                 st.rerun()
 
-# --- SEITE: ZEITEN (VOLLSTÄNDIG) ---
 elif st.session_state.page == "⏱️ Zeiten":
     st.markdown("### ⏱️ Zeiten")
     with st.expander("👤 NEUER MITARBEITER"):
