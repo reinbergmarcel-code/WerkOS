@@ -5,143 +5,136 @@ import datetime
 from fpdf import FPDF
 import pandas as pd
 
-# --- 1. SICHERE ZUGANGSDATEN ---
+# --- 1. ZUGANG ---
 try:
-    SUPABASE_URL = st.secrets["SUPABASE_URL"]
-    SUPABASE_KEY = st.secrets["SUPABASE_KEY"]
+    S_URL = st.secrets["SUPABASE_URL"]
+    S_KEY = st.secrets["SUPABASE_KEY"]
 except:
-    st.sidebar.warning("🔑 Keys über Sidebar aktiv")
-    SUPABASE_URL = st.sidebar.text_input("Supabase URL", value="https://sjviyysbjozculvslrdy.supabase.co")
-    SUPABASE_KEY = st.sidebar.text_input("Supabase Key", type="password")
+    S_URL = st.sidebar.text_input("URL", value="https://sjviyysbjozculvslrdy.supabase.co")
+    S_KEY = st.sidebar.text_input("Key", type="password")
 
-if SUPABASE_URL and SUPABASE_KEY:
-    try:
-        supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-    except:
-        st.error("Verbindung zu Supabase fehlgeschlagen.")
-        st.stop()
+if S_URL and S_KEY:
+    supabase = create_client(S_URL, S_KEY)
 else:
     st.stop()
 
-# --- 2. HILFSFUNKTIONEN ---
+# --- 2. TOOLS ---
 def speech_to_text(audio_bytes):
-    t = datetime.datetime.now().strftime('%H:%M')
-    return f"Sprachaufnahme vom {t}"
+    return f"Sprachaufnahme {datetime.datetime.now().strftime('%H:%M')}"
 
-class WerkOS_PDF(FPDF):
-    def header(self):
-        self.set_font('Arial', 'B', 15)
-        self.cell(0, 10, 'WerkOS - Professioneller Projektbericht', 0, 1, 'L')
-        self.ln(10)
-
-def create_pdf(data, project_name, total_cost):
-    pdf = WerkOS_PDF()
+def create_pdf(data, p_name, total):
+    pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"Projekt: {project_name} | Gesamt: {total_cost:.2f} EUR", ln=True)
-    pdf.ln(5)
+    pdf.cell(0, 10, f"Projekt: {p_name} | Gesamt: {total:.2f} EUR", ln=True)
     for e in data:
-        pdf.set_fill_color(240, 240, 240)
         pdf.set_font("Arial", "B", 10)
-        pdf.cell(0, 8, f"{e.get('category')} - {e.get('created_at', '')[:10]}", ln=True, fill=True)
+        pdf.cell(0, 8, f"{e.get('category')} - {e.get('created_at','')[:10]}", ln=True)
         pdf.set_font("Arial", "", 10)
-        pdf.multi_cell(0, 7, f"{e.get('content')} | {e.get('cost_amount', 0):.2f} EUR")
-        pdf.ln(3)
+        pdf.multi_cell(0, 7, f"{e.get('content')} | {e.get('cost_amount',0)} EUR")
     return bytes(pdf.output())
 
-st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
+st.set_page_config(page_title="WerkOS Pro", layout="wide")
 
-# --- 3. NAVIGATION ---
-st.sidebar.header("🚀 Hauptmenü")
-page = st.sidebar.radio("Navigation", ["📊 Dashboard", "📋 Board", "📦 Material & Lager", "⏱️ Zeit"])
+# --- 3. NAVI ---
+page = st.sidebar.radio("Menü", ["📊 Dash", "📋 Board", "📦 Lager", "⏱️ Zeit"])
+p_res = supabase.table("notes").select("project_name").execute()
+p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('project_name')])))
+curr_p = st.sidebar.selectbox("Projekt:", p_list if p_list else ["Allgemein"])
+if st.sidebar.text_input("✨ Neu:"): curr_p = st.sidebar.text_input("✨ Neu:")
 
-try:
-    p_res = supabase.table("notes").select("project_name").execute()
-    p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('project_name')])))
-except: p_list = ["Allgemein"]
-current_project = st.sidebar.selectbox("Baustelle:", p_list if p_list else ["Allgemein"])
-new_p = st.sidebar.text_input("✨ Neue Baustelle:")
-if new_p: current_project = new_p
-
-# --- SEITE 1: DASHBOARD ---
-if page == "📊 Dashboard":
-    st.title(f"📊 Dashboard: {current_project}")
+# --- SEITE 1: DASH ---
+if page == "📊 Dash":
+    st.title(f"📊 {curr_p}")
     m_check = supabase.table("materials").select("*").execute()
     if m_check.data:
-        low_stock = [m for m in m_check.data if float(m.get('stock_quantity', 0)) <= float(m.get('min_stock', 5))]
-        if low_stock:
-            st.warning(f"⚠️ **Bestands-Warnung:** {len(low_stock)} Artikel fast leer!")
-            with st.expander("Details"):
-                for l in low_stock: st.write(f"- {l['name']}: Nur noch {l['stock_quantity']} vorhanden.")
-
-    res = supabase.table("notes").select("*").eq("project_name", current_project).execute()
+        low = [m for m in m_check.data if float(m.get('stock_quantity',0)) <= float(m.get('min_stock',5))]
+        if low: st.warning(f"⚠️ {len(low)} Artikel fast leer!")
+    res = supabase.table("notes").select("*").eq("project_name", curr_p).execute()
     if res.data:
         df = pd.DataFrame(res.data)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Kosten", f"{df['cost_amount'].sum():.2f} €")
-        c2.metric("Einträge", len(df))
-        c3.metric("Offen", len(df[df['is_completed'] == False]))
-        st.divider()
+        st.metric("Gesamtkosten", f"{df['cost_amount'].sum():.2f} €")
         st.bar_chart(df.groupby('category')['cost_amount'].sum())
-    else: st.info("Keine Daten.")
 
 # --- SEITE 2: BOARD ---
 elif page == "📋 Board":
-    st.subheader(f"Board: {current_project}")
-    tab1, tab2 = st.tabs(["📋 Notizen & Media", "📅 Verlauf"])
-    with tab1:
-        col_in, col_med = st.columns([2, 1])
-        with col_in:
-            with st.form("entry_form", clear_on_submit=True):
-                txt = st.text_input("Titel")
-                c1, c2, c3 = st.columns(3)
-                kat = c1.selectbox("Kat:", ["Notiz", "Aufgabe", "Material", "Wichtig"])
-                prio = c2.selectbox("Status:", ["🟢 Ok", "🟡 In Arbeit", "🔴 Dringend"], index=1)
-                cost = c3.number_input("Kosten €:", min_value=0.0)
-                if st.form_submit_button("Speichern") and txt:
-                    supabase.table("notes").insert({"content": txt, "category": kat, "status": prio, "project_name": current_project, "cost_amount": cost, "is_completed": False}).execute()
-                    st.rerun()
-        with col_med:
-            img = st.camera_input("Foto", key="cam")
-            if img:
-                fn = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
-                url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
-                supabase.table("notes").insert({"content": "Foto-Notiz", "category": "Notiz", "status": "🟡 In Arbeit", "project_name": current_project, "image_url": url, "is_completed": False}).execute()
+    st.subheader(f"Board: {curr_p}")
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        with st.form("f1", clear_on_submit=True):
+            t = st.text_input("Titel")
+            kat = st.selectbox("Kat", ["Notiz", "Aufgabe", "Material", "Wichtig"])
+            cost = st.number_input("€", min_value=0.0)
+            if st.form_submit_button("OK") and t:
+                supabase.table("notes").insert({"content":t, "category":kat, "project_name":curr_p, "cost_amount":cost, "is_completed":False}).execute()
                 st.rerun()
-            aud = audio_recorder(text="", icon_size="2x", key="aud")
-            if aud:
-                supabase.table("notes").insert({"content": speech_to_text(aud), "category": "Notiz", "status": "🟡 In Arbeit", "project_name": current_project, "is_completed": False}).execute()
-                st.rerun()
-        st.divider()
-        res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", current_project).order("created_at", desc=True).execute()
-        for e in res.data:
-            with st.container():
-                st.markdown(f"**{e['status']} | {e['category']} ({e.get('cost_amount', 0)} €)**")
-                st.write(e['content'])
-                if e.get("image_url"): st.image(e["image_url"], use_container_width=True)
-                if st.button("Erledigt ✅", key=f"d_{e['id']}"):
-                    supabase.table("notes").update({"is_completed": True}).eq("id", e['id']).execute()
-                    st.rerun()
-                st.divider()
-    with tab2:
-        cal_res = supabase.table("notes").select("*").eq("project_name", current_project).eq("is_completed", True).order("created_at", desc=True).execute()
-        for item in cal_res.data: st.write(f"✅ **{item['created_at'][:10]}** | {item['content']}")
+    with c2:
+        img = st.camera_input("Foto")
+        if img:
+            fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
+            supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
+            url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
+            supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
+            st.rerun()
+        if audio_recorder():
+            supabase.table("notes").insert({"content":"Audio", "category":"Notiz", "project_name":curr_p, "is_completed":False}).execute()
+            st.rerun()
+    
+    res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
+    for e in res.data:
+        st.write(f"**{e['category']}** ({e['cost_amount']}€): {e['content']}")
+        if e.get("image_url"): st.image(e["image_url"])
+        if st.button("✅", key=e['id']):
+            supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute()
+            st.rerun()
 
-# --- SEITE 3: MATERIAL & LAGER ---
-elif page == "📦 Material & Lager":
-    st.subheader("📦 Lagerverwaltung")
-    with st.expander("➕ Neues Material anlegen"):
-        with st.form("new_mat"):
+# --- SEITE 3: LAGER ---
+elif page == "📦 Lager":
+    st.subheader("📦 Lager")
+    with st.expander("Neu"):
+        with st.form("f2"):
             n = st.text_input("Name")
-            p = st.number_input("Preis/Einh.", min_value=0.0)
-            stock = st.number_input("Bestand", min_value=0.0)
-            lim = st.number_input("Warnlimit", min_value=0.0, value=5.0)
-            if st.form_submit_button("Speichern"):
-                supabase.table("materials").insert({"name": n, "price_per_unit": p, "stock_quantity": stock, "min_stock": lim}).execute()
+            p = st.number_input("Preis")
+            s = st.number_input("Bestand")
+            l = st.number_input("Limit", value=5.0)
+            if st.form_submit_button("Save"):
+                supabase.table("materials").insert({"name":n, "price_per_unit":p, "stock_quantity":s, "min_stock":l}).execute()
                 st.rerun()
-    st.divider()
     m_res = supabase.table("materials").select("*").execute()
     if m_res.data:
-        m_df = pd.DataFrame(m_res.data)
-        m_df['Status'] = m_df.apply(lambda x: "⚠️ KNAPP" if float(x['stock
+        df_m = pd.DataFrame(m_res.data)
+        # Kurze Logik für Status-Spalte
+        df_m['Status'] = df_m.apply(lambda x: "⚠️" if float(x['stock_quantity']) <= float(x['min_stock']) else "✅", axis=1)
+        st.table(df_m[['name', 'stock_quantity', 'Status']])
+        with st.form("f3"):
+            sel = st.selectbox("Nutzen:", df_m['name'].tolist())
+            q = st.number_input("Menge", min_value=1.0)
+            if st.form_submit_button("Buchen"):
+                info = next(i for i in m_res.data if i['name'] == sel)
+                supabase.table("notes").insert({"content":f"{q}x {sel}", "category":"Material", "project_name":curr_p, "cost_amount":info['price_per_unit']*q, "is_completed":False}).execute()
+                supabase.table("materials").update({"stock_quantity": float(info['stock_quantity'])-q}).eq("id", info['id']).execute()
+                st.rerun()
+
+# --- SEITE 4: ZEIT ---
+elif page == "⏱️ Zeit":
+    st.subheader("⏱️ Zeit")
+    with st.expander("Mitarbeiter"):
+        with st.form("f4"):
+            sn = st.text_input("Name")
+            sr = st.number_input("Satz", value=45.0)
+            if st.form_submit_button("Save"):
+                supabase.table("staff").insert({"name":sn, "hourly_rate":sr}).execute()
+                st.rerun()
+    s_res = supabase.table("staff").select("*").execute()
+    if s_res.data:
+        s_dict = {i['name']: i for i in s_res.data}
+        with st.form("f5"):
+            sel_s = st.selectbox("Wer?", list(s_dict.keys()))
+            h = st.number_input("Stunden", min_value=0.5, step=0.5)
+            if st.form_submit_button("Buchen"):
+                s = s_dict[sel_s]
+                supabase.table("notes").insert({"content":f"{sel_s}: {h}h", "category":"Aufgabe", "project_name":curr_p, "cost_amount":s['hourly_rate']*h, "is_completed":False}).execute()
+                st.rerun()
+
+if st.sidebar.button("📄 PDF"):
+    r = supabase.table("notes").select("*").eq("project_name", curr_p).execute()
