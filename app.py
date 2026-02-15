@@ -13,7 +13,6 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif; background-color: #F4F7FB; }
     
-    /* Kompakter Header */
     .app-header {
         background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
         padding: 15px;
@@ -23,7 +22,13 @@ st.markdown("""
         margin-bottom: 15px;
     }
     
-    /* Karten-Design bleibt erhalten */
+    /* NEU: Zwingt die Nav-Spalten nebeneinander auf dem Handy */
+    [data-testid="column"] {
+        width: 20% !important;
+        flex: 1 1 20% !important;
+        min-width: 20% !important;
+    }
+
     .card {
         background: white;
         padding: 15px;
@@ -33,16 +38,15 @@ st.markdown("""
         border-left: 5px solid #3b82f6;
     }
     
-    /* Buttons einheitlich */
     .stButton>button {
         border-radius: 12px !important;
         font-weight: 600 !important;
+        width: 100%;
     }
 
     header {visibility: hidden;}
     footer {visibility: hidden;}
 
-    /* Button-Farben für Board-Aktionen */
     div.stButton > button[key^="d_"] { background-color: #2ecc71 !important; color: white !important; }
     div.stButton > button[key^="e_"] { background-color: #f1c40f !important; color: black !important; }
     div.stButton > button[key^="x_"] { background-color: #e74c3c !important; color: white !important; }
@@ -68,14 +72,18 @@ if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 # --- HEADER ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1></div>""", unsafe_allow_html=True)
 
-# --- NEU: ZENTRALE NAVIGATION (OBEN) ---
-# Diese Leiste ist robust und verzieht das Design nicht
+# --- NAVIGATION (FIXED FLEXBOX VIA CSS) ---
 nav_top = st.columns(5)
-if nav_top[0].button("🏠"): st.session_state.page = "🏠 Home"; st.rerun()
-if nav_top[1].button("📊"): st.session_state.page = "📊 Dashboard"; st.rerun()
-if nav_top[2].button("📋"): st.session_state.page = "📋 Board"; st.rerun()
-if nav_top[3].button("📦"): st.session_state.page = "📦 Lager"; st.rerun()
-if nav_top[4].button("⏱️"): st.session_state.page = "⏱️ Zeiten"; st.rerun()
+with nav_top[0]:
+    if st.button("🏠", key="nav_h"): st.session_state.page = "🏠 Home"; st.rerun()
+with nav_top[1]:
+    if st.button("📊", key="nav_d"): st.session_state.page = "📊 Dashboard"; st.rerun()
+with nav_top[2]:
+    if st.button("📋", key="nav_b"): st.session_state.page = "📋 Board"; st.rerun()
+with nav_top[3]:
+    if st.button("📦", key="nav_l"): st.session_state.page = "📦 Lager"; st.rerun()
+with nav_top[4]:
+    if st.button("⏱️", key="nav_z"): st.session_state.page = "⏱️ Zeiten"; st.rerun()
 
 st.divider()
 
@@ -85,7 +93,8 @@ p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('projec
 
 c_p1, c_p2 = st.columns([3,1])
 with c_p1:
-    curr_p = st.selectbox("📍 Projekt:", p_list if p_list else ["Allgemein"])
+    # Damit das Dropdown nicht auch gestaucht wird, setzen wir die Breite hier manuell zurück
+    curr_p = st.selectbox("📍 Projekt:", p_list if p_list else ["Allgemein"], key="project_sel")
 with c_p2:
     with st.popover("➕"):
         new_p = st.text_input("Name:")
@@ -97,11 +106,11 @@ with c_p2:
 # --- SEITE: HOME ---
 if st.session_state.page == "🏠 Home":
     st.markdown("### Menü")
-    col1, col2 = st.columns(2)
-    if col1.button("📊 DASHBOARD", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
-    if col1.button("📦 LAGER", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
-    if col2.button("📋 BOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
-    if col2.button("⏱️ ZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
+    # Hier nutzen wir keine Spalten, damit die Buttons schön groß bleiben
+    if st.button("📊 DASHBOARD", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
+    if st.button("📋 BOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
+    if st.button("📦 LAGER", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
+    if st.button("⏱️ ZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
 
 # --- SEITE: DASHBOARD ---
 elif st.session_state.page == "📊 Dashboard":
