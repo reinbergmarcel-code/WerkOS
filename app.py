@@ -39,6 +39,7 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
 
+    /* DESKTOP VISIBILITY FIX */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {
         min-height: 100px !important;
         display: block !important;
@@ -128,18 +129,15 @@ elif st.session_state.page == "📋 Board":
 
         st.markdown("---")
         st.write("🎤 Sprachnotiz aufnehmen:")
-        audio_data = audio_recorder(text="Aufnahme", icon_size="3x", key="audio_final_v22")
+        audio_data = audio_recorder(text="Aufnahme", icon_size="3x", key="audio_final_fixed")
         
         if audio_data:
             st.audio(audio_data)
-            if st.button("💾 SPEICHERN"):
-                # Lokales Speichern in Supabase
+            if st.button("💾 AUDIO SPEICHERN"):
                 afn = f"rec_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
                 supabase.storage.from_("werkos_fotos").upload(afn, audio_data)
                 a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
                 
-                # Wir nutzen hier den Standard-Titel, da die browserbasierte Echtzeit-Transkription 
-                # ein separates Javascript-Modul erfordert, das wir nicht extra laden wollen.
                 supabase.table("notes").insert({
                     "content": "Sprachnotiz", 
                     "category": "Notiz", 
@@ -149,7 +147,6 @@ elif st.session_state.page == "📋 Board":
                 }).execute()
                 st.rerun()
 
-    # Board Liste
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
         if st.session_state.edit_id == e['id']:
@@ -172,7 +169,6 @@ elif st.session_state.page == "📋 Board":
             if c3.button("🗑️", key=f"x_{e['id']}"):
                 supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
 
-# --- LAGER & ZEITEN ---
 elif st.session_state.page == "📦 Lager":
     st.markdown("### 📦 Lager")
     with st.expander("➕ NEUES MATERIAL ANLEGEN"):
