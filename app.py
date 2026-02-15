@@ -4,7 +4,7 @@ from supabase import create_client
 import datetime
 import pandas as pd
 
-# --- 1. APP CONFIG & STYLING (v2.28 Fix + Button Sichtbarkeit) ---
+# --- 1. APP CONFIG & STYLING (v2.30 Robust Archiv-Button) ---
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
 st.markdown("""
@@ -76,48 +76,48 @@ if st.session_state.page != "🏠 Home":
         st.session_state.page = "🏠 Home"
         st.rerun()
 
-# --- PROJEKT-DATEN LADEN ---
+# --- DATEN LADEN ---
 p_data = supabase.table("notes").select("project_name, content").execute()
-all_projects = list(set([e['project_name'] for e in p_data.data if e.get('project_name')]))
-archived_projects = list(set([e['project_name'] for e in p_data.data if e['content'] == "PROJECT_ARCHIVED"]))
-active_projects = [p for p in all_projects if p not in archived_projects]
+all_projects = sorted(list(set([e['project_name'] for e in p_data.data if e.get('project_name')])))
+# Projekte identifizieren, die den Archiv-Eintrag haben
+archived_list = list(set([e['project_name'] for e in p_data.data if e['content'] == "PROJECT_ARCHIVED"]))
 
-# --- PROJEKT-STEUERUNG (NEU GESTALTET) ---
+# --- NAVIGATION & ARCHIV STEUERUNG ---
+show_archived = st.checkbox("Archivierte Projekte einblenden", value=False)
+active_projects = [p for p in all_projects if p not in archived_list]
+display_list = all_projects if show_archived else active_projects
+
 c1, c2 = st.columns([3, 1])
-
 with c1:
-    show_archived = st.checkbox("Archivierte Projekte einblenden", value=False)
-    display_list = all_projects if show_archived else active_projects
-    curr_p = st.selectbox("📍 Aktuelles Projekt:", sorted(display_list) if display_list else ["Allgemein"])
+    curr_p = st.selectbox("📍 Baustelle wählen:", display_list if display_list else ["Allgemein"])
 
 with c2:
-    with st.popover("⚙️ Verwaltung"):
-        st.write("**Neues Projekt:**")
-        new_p = st.text_input("Name eingeben:")
-        if st.button("Projekt anlegen"):
+    with st.popover("⚙️ Optionen"):
+        st.subheader("Neues Projekt")
+        new_p = st.text_input("Name:", key="new_p_input")
+        if st.button("Erstellen", use_container_width=True):
             if new_p:
                 supabase.table("notes").insert({"content": "Projektstart", "project_name": new_p, "category": "Notiz", "is_completed": False}).execute()
                 st.rerun()
         
         st.divider()
-        
+        st.subheader("Status ändern")
         if curr_p and curr_p != "Allgemein":
-            if curr_p not in archived_projects:
-                st.write(f"**{curr_p} abschließen:**")
-                if st.button("📁 Jetzt Archivieren"):
+            if curr_p not in archived_list:
+                if st.button(f"📁 {curr_p} Archivieren", use_container_width=True):
                     supabase.table("notes").insert({"content": "PROJECT_ARCHIVED", "project_name": curr_p, "category": "System", "is_completed": True}).execute()
                     st.rerun()
             else:
-                st.write(f"**{curr_p} reaktivieren:**")
-                if st.button("🔓 Aus Archiv holen"):
+                if st.button(f"🔓 {curr_p} Reaktivieren", use_container_width=True):
                     supabase.table("notes").delete().eq("project_name", curr_p).eq("content", "PROJECT_ARCHIVED").execute()
                     st.rerun()
+        else:
+            st.info("Wähle ein Projekt zum Archivieren.")
 
 st.divider()
+is_archived = curr_p in archived_list
 
-# --- SEITEN LOGIK (BOARD, LAGER, ZEITEN) ---
-is_archived = curr_p in archived_projects
-
+# --- SEITEN LOGIK ---
 if st.session_state.page == "🏠 Home":
     col1, col2 = st.columns(2)
     with col1:
@@ -137,9 +137,9 @@ elif st.session_state.page == "📊 Dashboard":
 
 elif st.session_state.page == "📋 Board":
     if is_archived:
-        st.warning("⚠️ Dieses Projekt ist archiviert. Keine neuen Einträge möglich.")
+        st.warning("🔒 Archiviertes Projekt - Keine Bearbeitung möglich.")
     else:
-        with st.expander("➕ NEUER EINTRAG / FOTO / AUDIO"):
+        with st.expander("➕ NEUER EINTRAG"):
             with st.form("new_e"):
                 t = st.text_input("Titel")
                 k = st.selectbox("Kat", ["Aufgabe", "Notiz", "Wichtig"])
@@ -148,7 +148,7 @@ elif st.session_state.page == "📋 Board":
                     supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
                     st.rerun()
             
-            img = st.camera_input("Kamera")
+            img = st.camera_input("Foto")
             if img:
                 fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
                 supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
@@ -156,8 +156,8 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
                 st.rerun()
 
-            st.write("🎤 Sprachnotiz:")
-            audio_data = audio_recorder(text="Aufnahme", icon_size="3x", key="audio_v29")
+            st.write("🎤 Audio:")
+            audio_data = audio_recorder(text="Aufnahme", icon_size="2x", key="audio_v30")
             if audio_data and st.button("💾 AUDIO SPEICHERN"):
                 afn = f"rec_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
                 supabase.storage.from_("werkos_fotos").upload(afn, audio_data)
@@ -192,15 +192,15 @@ elif st.session_state.page == "📋 Board":
 elif st.session_state.page == "📦 Lager":
     st.markdown("### 📦 Lager")
     m_res = supabase.table("materials").select("*").execute()
-    with st.expander("📥 BESTAND KORREKTUR"):
+    with st.expander("📥 INVENTUR"):
         with st.form("m_update"):
             sel_m = st.selectbox("Material:", [i['name'] for i in m_res.data])
-            new_q = st.number_input("Neuer Ist-Bestand", min_value=0.0)
-            if st.form_submit_button("Bestand überschreiben"):
+            new_q = st.number_input("Neuer Bestand", min_value=0.0)
+            if st.form_submit_button("Speichern"):
                 info = next(i for i in m_res.data if i['name'] == sel_m)
                 supabase.table("materials").update({"stock_quantity": new_q}).eq("id", info['id']).execute()
                 st.rerun()
-    with st.expander("📤 VERBRAUCH BUCHEN"):
+    with st.expander("📤 VERBRAUCH"):
         if is_archived: st.error("Projekt archiviert.")
         else:
             with st.form("m_book"):
