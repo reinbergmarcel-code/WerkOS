@@ -52,7 +52,6 @@ st.title("🏗️ WerkOS Pro")
 st.sidebar.header("🚀 Hauptmenü")
 page = st.sidebar.radio("Gehe zu:", ["📋 Baustellen-Board", "📦 Material & Lager", "⏱️ Zeiterfassung"])
 
-# Projektwahl
 try:
     p_res = supabase.table("notes").select("project_name").execute()
     p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('project_name')])))
@@ -70,18 +69,42 @@ st.sidebar.metric("Projekt-Ausgaben", f"{total_budget:.2f} €")
 # --- SEITE 1: BOARD ---
 if page == "📋 Baustellen-Board":
     st.subheader(f"Board: {current_project}")
-    tab1, tab2 = st.tabs(["📋 Notizen", "📅 Verlauf"])
+    tab1, tab2 = st.tabs(["📋 Notizen & Media", "📅 Verlauf"])
+    
     with tab1:
-        with st.form("entry_form", clear_on_submit=True):
-            txt = st.text_input("Titel")
-            c1, c2, c3 = st.columns(3)
-            kat = c1.selectbox("Kat:", ["Notiz", "Aufgabe", "Material", "Wichtig"])
-            prio = c2.selectbox("Status:", ["🟢 Ok", "🟡 In Arbeit", "🔴 Dringend"], index=1)
-            cost = c3.number_input("Kosten €:", min_value=0.0)
-            if st.form_submit_button("Speichern") and txt:
-                supabase.table("notes").insert({"content": txt, "category": kat, "status": prio, "project_name": current_project, "cost_amount": cost, "is_completed": False}).execute()
-                st.rerun()
+        c_in, c_med = st.columns([2, 1])
         
+        # LINKER TEIL: TEXT-EINGABE
+        with c_in:
+            with st.form("entry_form", clear_on_submit=True):
+                txt = st.text_input("Titel / Aufgabe")
+                c1, c2, c3 = st.columns(3)
+                kat = c1.selectbox("Kat:", ["Notiz", "Aufgabe", "Material", "Wichtig"])
+                prio = c2.selectbox("Status:", ["🟢 Ok", "🟡 In Arbeit", "🔴 Dringend"], index=1)
+                cost = c3.number_input("Kosten €:", min_value=0.0)
+                if st.form_submit_button("Speichern") and txt:
+                    supabase.table("notes").insert({"content": txt, "category": kat, "status": prio, "project_name": current_project, "cost_amount": cost, "is_completed": False}).execute()
+                    st.rerun()
+        
+        # RECHTER TEIL: KAMERA & AUDIO
+        with c_med:
+            st.write("📸 Foto / 🎤 Audio")
+            img = st.camera_input("Foto aufnehmen", key="cam")
+            if img:
+                if st.session_state.get("last_img") != img.size:
+                    with st.spinner("Upload..."):
+                        fn = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                        supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
+                        url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
+                        supabase.table("notes").insert({"content": "Foto-Notiz", "category": "Notiz", "status": "🟡 In Arbeit", "project_name": current_project, "image_url": url, "is_completed": False}).execute()
+                        st.session_state["last_img"] = img.size
+                        st.rerun()
+            
+            aud = audio_recorder(text="Klick für Sprach-Notiz", icon_size="2x", key="aud")
+            if aud:
+                supabase.table("notes").insert({"content": speech_to_text(aud), "category": "Notiz", "status": "🟡 In Arbeit", "project_name": current_project, "is_completed": False}).execute()
+                st.rerun()
+
         st.divider()
         res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", current_project).order("created_at", desc=True).execute()
         for e in res.data:
@@ -94,52 +117,44 @@ if page == "📋 Baustellen-Board":
                     st.rerun()
                 st.divider()
 
-# --- SEITE 2: MATERIAL ---
+    with tab2:
+        st.subheader("📅 Verlauf (Erledigt)")
+        cal_res = supabase.table("notes").select("*").eq("project_name", current_project).eq("is_completed", True).order("created_at", desc=True).execute()
+        for item in cal_res.data:
+            st.write(f"✅ **{item['created_at'][:10]}** | {item['category']}: {item['content']}")
+
+# --- SEITE 2: MATERIAL & LAGER ---
 elif page == "📦 Material & Lager":
     st.subheader("📦 Materialverwaltung")
-    
-    # Teil A: Immer sichtbar - Neues Material anlegen
-    with st.expander("➕ Neues Material zum Katalog hinzufügen", expanded=True):
+    with st.expander("➕ Neues Material zum Katalog hinzufügen"):
         with st.form("new_mat_form"):
             n_name = st.text_input("Materialname")
             n_unit = st.selectbox("Einheit", ["Stück", "Sack", "Meter", "m²", "m³", "Paket"])
             n_price = st.number_input("Preis pro Einheit (€)", min_value=0.0)
             if st.form_submit_button("Speichern"):
                 supabase.table("materials").insert({"name": n_name, "unit": n_unit, "price_per_unit": n_price}).execute()
-                st.success(f"{n_name} im Katalog!")
+                st.success(f"{n_name} gespeichert!")
                 st.rerun()
-
     st.divider()
-    
-    # Teil B: Auswahl aus Katalog
-    st.write("### Auf Baustelle buchen")
     try:
         mat_res = supabase.table("materials").select("*").execute()
-        if mat_res.data and len(mat_res.data) > 0:
+        if mat_res.data:
             mat_options = {m['name']: m for m in mat_res.data}
             with st.form("book_mat"):
                 sel_name = st.selectbox("Material wählen:", list(mat_options.keys()))
                 menge = st.number_input("Menge:", min_value=1.0)
-                if st.form_submit_button("Jetzt buchen"):
+                if st.form_submit_button("Auf Baustelle buchen"):
                     m = mat_options[sel_name]
-                    supabase.table("notes").insert({
-                        "content": f"{menge} {m['unit']} {sel_name}",
-                        "category": "Material", "status": "🟢 Ok",
-                        "project_name": current_project, "cost_amount": m['price_per_unit'] * menge,
-                        "is_completed": False
-                    }).execute()
-                    st.success("Erfolgreich auf Baustelle gebucht!")
+                    supabase.table("notes").insert({"content": f"{menge} {m['unit']} {sel_name}", "category": "Material", "status": "🟢 Ok", "project_name": current_project, "cost_amount": m['price_per_unit'] * menge, "is_completed": False}).execute()
+                    st.success("Gebucht!")
                     st.rerun()
-        else:
-            st.info("Dein Katalog ist leer. Leg oben Materialien an.")
-    except Exception as e:
-        st.error(f"Datenbank-Fehler: {e}. Prüfe, ob die Tabelle 'materials' in Supabase existiert.")
+        else: st.info("Katalog leer.")
+    except Exception as e: st.error(f"Fehler: {e}")
 
 # --- SEITE 3: ZEITERFASSUNG ---
 elif page == "⏱️ Zeiterfassung":
     st.subheader("⏱️ Zeiterfassung")
-    
-    with st.expander("👤 Neuen Mitarbeiter anlegen", expanded=True):
+    with st.expander("👤 Neuen Mitarbeiter anlegen"):
         with st.form("new_staff"):
             s_name = st.text_input("Name")
             s_rate = st.number_input("Stundensatz (€)", min_value=0.0, value=45.0)
@@ -147,34 +162,12 @@ elif page == "⏱️ Zeiterfassung":
                 supabase.table("staff").insert({"name": s_name, "hourly_rate": s_rate}).execute()
                 st.success(f"{s_name} angelegt!")
                 st.rerun()
-
     st.divider()
-
-    st.write("### Stunden buchen")
     try:
         staff_res = supabase.table("staff").select("*").execute()
-        if staff_res.data and len(staff_res.data) > 0:
+        if staff_res.data:
             staff_options = {s['name']: s for s in staff_res.data}
             with st.form("book_time"):
                 sel_staff = st.selectbox("Mitarbeiter:", list(staff_options.keys()))
                 stunden = st.number_input("Stunden:", min_value=0.5, step=0.5)
-                if st.form_submit_button("Zeit buchen"):
-                    s = staff_options[sel_staff]
-                    supabase.table("notes").insert({
-                        "content": f"{sel_staff}: {stunden} Std.",
-                        "category": "Aufgabe", "status": "🟢 Ok",
-                        "project_name": current_project, "cost_amount": s['hourly_rate'] * stunden,
-                        "is_completed": False
-                    }).execute()
-                    st.success("Zeit gebucht!")
-                    st.rerun()
-        else:
-            st.info("Keine Mitarbeiter gefunden. Leg oben jemanden an.")
-    except Exception as e:
-        st.error(f"Datenbank-Fehler: {e}. Prüfe, ob die Tabelle 'staff' in Supabase existiert.")
-
-# PDF Bericht
-if st.sidebar.button("📄 Bericht erstellen"):
-    pdf_res = supabase.table("notes").select("*").eq("project_name", current_project).execute()
-    pdf_b = create_pdf(pdf_res.data, current_project, total_budget)
-    st.sidebar.download_button("Download PDF", pdf_b, f"Bericht_{current_project}.pdf")
+                if st.form_
