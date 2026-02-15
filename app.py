@@ -5,7 +5,7 @@ import datetime
 from fpdf import FPDF
 import pandas as pd
 
-# --- 1. APP CONFIG & ULTIMATE STYLING ---
+# --- 1. APP CONFIG & CLEAN STYLING ---
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
 st.markdown("""
@@ -13,54 +13,39 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif; background-color: #F4F7FB; }
     
+    /* Kompakter Header */
     .app-header {
         background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
-        padding: 20px;
-        border-radius: 0 0 25px 25px;
+        padding: 15px;
+        border-radius: 0 0 20px 20px;
         color: white;
         text-align: center;
-        margin-bottom: 25px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        margin-bottom: 15px;
     }
     
-    .stButton>button {
-        border-radius: 18px !important;
-        height: 4rem !important;
-        font-size: 1rem !important;
-        background: white !important;
-        color: #1e3a8a !important;
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
-    }
-
+    /* Karten-Design bleibt erhalten */
     .card {
         background: white;
-        padding: 20px;
-        border-radius: 20px;
-        margin-bottom: 15px;
-        box-shadow: 0 10px 20px rgba(0,0,0,0.03);
-        border-left: 6px solid #3b82f6;
+        padding: 15px;
+        border-radius: 15px;
+        margin-bottom: 10px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+        border-left: 5px solid #3b82f6;
     }
     
+    /* Buttons einheitlich */
+    .stButton>button {
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+    }
+
     header {visibility: hidden;}
     footer {visibility: hidden;}
 
-    /* Spezifische Button-Farben */
-    div.stButton > button[key^="d_"] { background-color: #2ecc71 !important; color: white !important; height: 3rem !important; }
-    div.stButton > button[key^="e_"] { background-color: #f1c40f !important; color: black !important; height: 3rem !important; }
-    div.stButton > button[key^="x_"] { background-color: #e74c3c !important; color: white !important; height: 3rem !important; }
-
-    /* FIXIERTE NAVIGATION UNTEN */
-    div[data-testid="stVerticalBlock"] > div:last-child {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        background: white;
-        z-index: 1000;
-        padding: 10px;
-        box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
-    }
+    /* Button-Farben für Board-Aktionen */
+    div.stButton > button[key^="d_"] { background-color: #2ecc71 !important; color: white !important; }
+    div.stButton > button[key^="e_"] { background-color: #f1c40f !important; color: black !important; }
+    div.stButton > button[key^="x_"] { background-color: #e74c3c !important; color: white !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -81,46 +66,55 @@ if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 
 # --- HEADER ---
-st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1><p>Digitales Baustellenmanagement</p></div>""", unsafe_allow_html=True)
+st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1></div>""", unsafe_allow_html=True)
 
+# --- NEU: ZENTRALE NAVIGATION (OBEN) ---
+# Diese Leiste ist robust und verzieht das Design nicht
+nav_top = st.columns(5)
+if nav_top[0].button("🏠"): st.session_state.page = "🏠 Home"; st.rerun()
+if nav_top[1].button("📊"): st.session_state.page = "📊 Dashboard"; st.rerun()
+if nav_top[2].button("📋"): st.session_state.page = "📋 Board"; st.rerun()
+if nav_top[3].button("📦"): st.session_state.page = "📦 Lager"; st.rerun()
+if nav_top[4].button("⏱️"): st.session_state.page = "⏱️ Zeiten"; st.rerun()
+
+st.divider()
+
+# Projektwahl
 p_res = supabase.table("notes").select("project_name").execute()
 p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('project_name')])))
 
-c_top1, c_top2 = st.columns([3,1])
-with c_top1:
-    curr_p = st.selectbox("📍 Baustelle:", p_list if p_list else ["Allgemein"])
-with c_top2:
-    with st.popover("➕ Projekt"):
+c_p1, c_p2 = st.columns([3,1])
+with c_p1:
+    curr_p = st.selectbox("📍 Projekt:", p_list if p_list else ["Allgemein"])
+with c_p2:
+    with st.popover("➕"):
         new_p = st.text_input("Name:")
-        if st.button("Anlegen"):
+        if st.button("OK"):
             if new_p:
                 supabase.table("notes").insert({"content": "Start", "project_name": new_p, "category": "Notiz", "is_completed": False}).execute()
                 st.rerun()
 
-st.divider()
-
 # --- SEITE: HOME ---
 if st.session_state.page == "🏠 Home":
+    st.markdown("### Menü")
     col1, col2 = st.columns(2)
-    with col1:
-        if st.button("📊\nDASHBOARD", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
-        if st.button("📦\nLAGER", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
-    with col2:
-        if st.button("📋\nBOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
-        if st.button("⏱️\nZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
+    if col1.button("📊 DASHBOARD", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
+    if col1.button("📦 LAGER", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
+    if col2.button("📋 BOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
+    if col2.button("⏱️ ZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
 
 # --- SEITE: DASHBOARD ---
 elif st.session_state.page == "📊 Dashboard":
-    st.markdown(f"### 📊 Dashboard: {curr_p}")
+    st.markdown(f"### 📊 Statistik: {curr_p}")
     res = supabase.table("notes").select("*").eq("project_name", curr_p).execute()
     if res.data:
         df = pd.DataFrame(res.data)
-        st.metric("Gesamtkosten", f"{df['cost_amount'].sum():.2f} €")
+        st.metric("Kosten", f"{df['cost_amount'].sum():.2f} €")
         st.bar_chart(df.groupby('category')['cost_amount'].sum())
 
 # --- SEITE: BOARD ---
 elif st.session_state.page == "📋 Board":
-    with st.expander("➕ NEUER EINTRAG / FOTO"):
+    with st.expander("➕ NEU"):
         with st.form("new_e"):
             t = st.text_input("Titel")
             k = st.selectbox("Kat", ["Aufgabe", "Notiz", "Wichtig"])
@@ -162,13 +156,13 @@ elif st.session_state.page == "📋 Board":
 
 # --- SEITE: LAGER ---
 elif st.session_state.page == "📦 Lager":
-    st.markdown("### 📦 Lager")
-    with st.expander("➕ NEUES MATERIAL ANLEGEN"):
+    st.subheader("Lager")
+    with st.expander("➕ ANLEGEN"):
         with st.form("m_add"):
             n = st.text_input("Name")
             p = st.number_input("Preis")
             s = st.number_input("Bestand")
-            if st.form_submit_button("Anlegen"):
+            if st.form_submit_button("Hinzufügen"):
                 supabase.table("materials").insert({"name":n, "price_per_unit":p, "stock_quantity":s, "min_stock":5}).execute()
                 st.rerun()
     m_res = supabase.table("materials").select("*").execute()
@@ -185,8 +179,8 @@ elif st.session_state.page == "📦 Lager":
 
 # --- SEITE: ZEITEN ---
 elif st.session_state.page == "⏱️ Zeiten":
-    st.markdown("### ⏱️ Zeiten")
-    with st.expander("👤 NEUER MITARBEITER"):
+    st.subheader("Zeiten")
+    with st.expander("👤 MITARBEITER ANLEGEN"):
         with st.form("s_add"):
             sn = st.text_input("Name")
             sr = st.number_input("Satz €", value=45.0)
@@ -202,27 +196,3 @@ elif st.session_state.page == "⏱️ Zeiten":
                 s = next(i for i in s_res.data if i['name'] == sel_s)
                 supabase.table("notes").insert({"content":f"{sel_s}: {h}h", "category":"Aufgabe", "project_name":curr_p, "cost_amount":s['hourly_rate']*h, "is_completed":False}).execute()
                 st.rerun()
-
-# --- FIXIERTE NAVIGATION UNTEN ---
-st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True) # Abstandhalter
-nav_cols = st.columns(5)
-with nav_cols[0]:
-    if st.button("🏠", key="fix_home"):
-        st.session_state.page = "🏠 Home"
-        st.rerun()
-with nav_cols[1]:
-    if st.button("📊", key="fix_dash"):
-        st.session_state.page = "📊 Dashboard"
-        st.rerun()
-with nav_cols[2]:
-    if st.button("📋", key="fix_board"):
-        st.session_state.page = "📋 Board"
-        st.rerun()
-with nav_cols[3]:
-    if st.button("📦", key="fix_lager"):
-        st.session_state.page = "📦 Lager"
-        st.rerun()
-with nav_cols[4]:
-    if st.button("⏱️", key="fix_zeit"):
-        st.session_state.page = "⏱️ Zeiten"
-        st.rerun()
