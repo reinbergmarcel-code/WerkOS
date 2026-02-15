@@ -32,29 +32,26 @@ class WerkOS_PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 15)
         self.cell(0, 10, 'WerkOS - Professioneller Projektbericht', 0, 1, 'L')
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 5, f'Erstellt am: {datetime.datetime.now().strftime("%d.%m.%Y %H:%M")}', 0, 1, 'L')
         self.ln(10)
 
 def create_pdf(data, project_name, total_cost):
     pdf = WerkOS_PDF()
     pdf.add_page()
     pdf.set_font("Arial", "B", 14)
-    pdf.cell(0, 10, f"Projekt: {project_name}", ln=True)
-    pdf.cell(0, 10, f"Gesamtkosten: {total_cost:.2f} EUR", ln=True)
+    pdf.cell(0, 10, f"Projekt: {project_name} | Gesamt: {total_cost:.2f} EUR", ln=True)
     pdf.ln(5)
     for e in data:
         pdf.set_fill_color(240, 240, 240)
         pdf.set_font("Arial", "B", 10)
         pdf.cell(0, 8, f"{e.get('category')} - {e.get('created_at', '')[:10]}", ln=True, fill=True)
         pdf.set_font("Arial", "", 10)
-        pdf.multi_cell(0, 7, f"{e.get('content')} | Kosten: {e.get('cost_amount', 0):.2f} EUR")
+        pdf.multi_cell(0, 7, f"{e.get('content')} | {e.get('cost_amount', 0):.2f} EUR")
         pdf.ln(3)
     return bytes(pdf.output())
 
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
-# --- 3. SIDEBAR & PROJEKTWAHL ---
+# --- 3. NAVIGATION ---
 st.sidebar.header("🚀 Hauptmenü")
 page = st.sidebar.radio("Navigation", ["📊 Dashboard", "📋 Board", "📦 Material & Lager", "⏱️ Zeit"])
 
@@ -69,31 +66,24 @@ if new_p: current_project = new_p
 # --- SEITE 1: DASHBOARD ---
 if page == "📊 Dashboard":
     st.title(f"📊 Dashboard: {current_project}")
-    
-    # NEU: Lagerwarnung im Dashboard
     m_check = supabase.table("materials").select("*").execute()
     if m_check.data:
-        low_stock_items = [m for m in m_check.data if m.get('stock_quantity', 0) <= m.get('min_stock', 5)]
-        if low_stock_items:
-            st.warning(f"⚠️ **Lager-Warnung:** {len(low_stock_items)} Materialien sind fast leer!")
-            with st.expander("Details anzeigen"):
-                for l in low_stock_items:
-                    st.write(f"- {l['name']}: Nur noch {l['stock_quantity']} im Lager (Limit: {l['min_stock']})")
+        low_stock = [m for m in m_check.data if float(m.get('stock_quantity', 0)) <= float(m.get('min_stock', 5))]
+        if low_stock:
+            st.warning(f"⚠️ **Bestands-Warnung:** {len(low_stock)} Artikel fast leer!")
+            with st.expander("Details"):
+                for l in low_stock: st.write(f"- {l['name']}: Nur noch {l['stock_quantity']} vorhanden.")
 
     res = supabase.table("notes").select("*").eq("project_name", current_project).execute()
     if res.data:
         df = pd.DataFrame(res.data)
         c1, c2, c3 = st.columns(3)
-        total = df['cost_amount'].sum()
-        c1.metric("Gesamtkosten", f"{total:.2f} €")
+        c1.metric("Kosten", f"{df['cost_amount'].sum():.2f} €")
         c2.metric("Einträge", len(df))
-        c3.metric("Offene Aufgaben", len(df[df['is_completed'] == False]))
+        c3.metric("Offen", len(df[df['is_completed'] == False]))
         st.divider()
-        st.subheader("Kostenverteilung")
-        chart_data = df.groupby('category')['cost_amount'].sum()
-        st.bar_chart(chart_data)
-    else:
-        st.info("Noch keine Daten für dieses Projekt vorhanden.")
+        st.bar_chart(df.groupby('category')['cost_amount'].sum())
+    else: st.info("Keine Daten.")
 
 # --- SEITE 2: BOARD ---
 elif page == "📋 Board":
@@ -103,7 +93,7 @@ elif page == "📋 Board":
         col_in, col_med = st.columns([2, 1])
         with col_in:
             with st.form("entry_form", clear_on_submit=True):
-                txt = st.text_input("Titel / Aufgabe")
+                txt = st.text_input("Titel")
                 c1, c2, c3 = st.columns(3)
                 kat = c1.selectbox("Kat:", ["Notiz", "Aufgabe", "Material", "Wichtig"])
                 prio = c2.selectbox("Status:", ["🟢 Ok", "🟡 In Arbeit", "🔴 Dringend"], index=1)
@@ -112,16 +102,13 @@ elif page == "📋 Board":
                     supabase.table("notes").insert({"content": txt, "category": kat, "status": prio, "project_name": current_project, "cost_amount": cost, "is_completed": False}).execute()
                     st.rerun()
         with col_med:
-            st.write("📸 Foto / 🎤 Audio")
             img = st.camera_input("Foto", key="cam")
             if img:
-                if st.session_state.get("last_img") != img.size:
-                    fn = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
-                    supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
-                    url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
-                    supabase.table("notes").insert({"content": "Foto-Notiz", "category": "Notiz", "status": "🟡 In Arbeit", "project_name": current_project, "image_url": url, "is_completed": False}).execute()
-                    st.session_state["last_img"] = img.size
-                    st.rerun()
+                fn = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
+                supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
+                url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
+                supabase.table("notes").insert({"content": "Foto-Notiz", "category": "Notiz", "status": "🟡 In Arbeit", "project_name": current_project, "image_url": url, "is_completed": False}).execute()
+                st.rerun()
             aud = audio_recorder(text="", icon_size="2x", key="aud")
             if aud:
                 supabase.table("notes").insert({"content": speech_to_text(aud), "category": "Notiz", "status": "🟡 In Arbeit", "project_name": current_project, "is_completed": False}).execute()
@@ -139,35 +126,22 @@ elif page == "📋 Board":
                 st.divider()
     with tab2:
         cal_res = supabase.table("notes").select("*").eq("project_name", current_project).eq("is_completed", True).order("created_at", desc=True).execute()
-        for item in cal_res.data:
-            st.write(f"✅ **{item['created_at'][:10]}** | {item['category']}: {item['content']}")
+        for item in cal_res.data: st.write(f"✅ **{item['created_at'][:10]}** | {item['content']}")
 
 # --- SEITE 3: MATERIAL & LAGER ---
 elif page == "📦 Material & Lager":
     st.subheader("📦 Lagerverwaltung")
-    with st.expander("➕ Neues Material / Bestand hinzufügen"):
+    with st.expander("➕ Neues Material anlegen"):
         with st.form("new_mat"):
             n = st.text_input("Name")
-            p = st.number_input("Preis pro Einheit (€)", min_value=0.0)
-            stock = st.number_input("Lagerbestand (Anfang)", min_value=0.0)
-            m_limit = st.number_input("Warnen bei Bestand unter...", min_value=0.0, value=5.0)
-            if st.form_submit_button("Im Katalog speichern"):
-                supabase.table("materials").insert({"name": n, "price_per_unit": p, "stock_quantity": stock, "min_stock": m_limit}).execute()
+            p = st.number_input("Preis/Einh.", min_value=0.0)
+            stock = st.number_input("Bestand", min_value=0.0)
+            lim = st.number_input("Warnlimit", min_value=0.0, value=5.0)
+            if st.form_submit_button("Speichern"):
+                supabase.table("materials").insert({"name": n, "price_per_unit": p, "stock_quantity": stock, "min_stock": lim}).execute()
                 st.rerun()
     st.divider()
     m_res = supabase.table("materials").select("*").execute()
     if m_res.data:
-        # Bestandsliste mit Warn-Emojis
         m_df = pd.DataFrame(m_res.data)
-        m_df['Status'] = m_df.apply(lambda x: "⚠️ KNAPP" if x['stock_quantity'] <= x['min_stock'] else "✅ OK", axis=1)
-        st.write("### Aktueller Bestand")
-        st.table(m_df[['name', 'stock_quantity', 'min_stock', 'Status', 'price_per_unit']])
-        
-        with st.form("book_mat"):
-            sel = st.selectbox("Material entnehmen:", m_df['name'].tolist())
-            qty = st.number_input("Menge:", min_value=1.0)
-            if st.form_submit_button("Buchen & Bestand abziehen"):
-                m_info = next(item for item in m_res.data if item['name'] == sel)
-                supabase.table("notes").insert({"content": f"{qty}x {sel}", "category": "Material", "project_name": current_project, "cost_amount": m_info['price_per_unit']*qty, "is_completed": False}).execute()
-                new_q = m_info['stock_quantity'] - qty
-                supabase.table("materials").update({"stock
+        m_df['Status'] = m_df.apply(lambda x: "⚠️ KNAPP" if float(x['stock
