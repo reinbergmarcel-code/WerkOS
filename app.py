@@ -7,22 +7,26 @@ import pandas as pd
 # 1. DATENBANK-SETUP
 try:
     supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
-except:
-    st.error("Verbindung fehlgeschlagen."); st.stop()
+except Exception as e:
+    st.error(f"Datenbank-Verbindung fehlgeschlagen: {e}"); st.stop()
 
-# 2. APP-STEUERUNG
+# 2. APP-STATE
 if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 
 st.title("WerkOS Pro 🏗️")
 
-# 3. DATEN ABFRAGEN
-res = supabase.table("notes").select("*").execute()
-all_data = res.data if res.data else []
+# 3. DATEN ABFRAGEN (Notes & Projekte)
+try:
+    res_notes = supabase.table("notes").select("*").execute()
+    all_data = res_notes.data if res_notes.data else []
+except:
+    all_data = []
+
 all_p = sorted(list(set([e['project_name'] for e in all_data if e.get('project_name')])))
 arch_p = list(set([e['project_name'] for e in all_data if e['content'] == "PROJECT_ARCHIVED"]))
 
-# 4. PROJEKT-VERWALTUNG
+# 4. PROJEKT-STEUERUNG
 c1, c2 = st.columns([3, 1])
 with c1:
     show_arch = st.checkbox("Archiv anzeigen")
@@ -36,15 +40,15 @@ with c2:
                 st.rerun()
 
 is_archived = curr_p in arch_p
+
+# ARCHIVIEREN / REAKTIVIEREN
 if curr_p and curr_p != "Allgemein":
     if not is_archived:
         if st.button(f"📁 '{curr_p}' ARCHIVIEREN", use_container_width=True):
-            supabase.table("notes").insert({"content": "PROJECT_ARCHIVED", "project_name": curr_p, "category": "System", "is_completed": True}).execute()
-            st.rerun()
+            supabase.table("notes").insert({"content": "PROJECT_ARCHIVED", "project_name": curr_p, "category": "System", "is_completed": True}).execute(); st.rerun()
     else:
         if st.button(f"🔓 '{curr_p}' REAKTIVIEREN", use_container_width=True):
-            supabase.table("notes").delete().eq("project_name", curr_p).eq("content", "PROJECT_ARCHIVED").execute()
-            st.rerun()
+            supabase.table("notes").delete().eq("project_name", curr_p).eq("content", "PROJECT_ARCHIVED").execute(); st.rerun()
 
 st.divider()
 
@@ -63,16 +67,13 @@ elif st.session_state.page == "📋 Board":
             audio_recorder(text="Sprachaufnahme")
             st.camera_input("Foto")
             with st.form("nb"):
-                t = st.text_input("Titel/Notiz")
+                t = st.text_input("Inhalt")
                 k = st.selectbox("Kategorie", ["Notiz", "Aufgabe", "Wichtig"])
                 c = st.number_input("Kosten €", value=0.0)
                 if st.form_submit_button("Speichern"):
-                    supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
-                    st.rerun()
+                    supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute(); st.rerun()
 
     items = [e for e in all_data if e['project_name'] == curr_p and not e['is_completed'] and e['content'] != "PROJECT_ARCHIVED"]
-    
-    # Ampel-Farben Mapping
     colors = {"Notiz": "blue", "Aufgabe": "orange", "Wichtig": "red", "Material": "gray"}
 
     for e in items:
@@ -80,53 +81,51 @@ elif st.session_state.page == "📋 Board":
             with st.form(f"ed_{e['id']}"):
                 nt = st.text_input("Ändern", value=e['content'])
                 if st.form_submit_button("OK"):
-                    supabase.table("notes").update({"content": nt}).eq("id", e['id']).execute()
-                    st.session_state.edit_id = None; st.rerun()
+                    supabase.table("notes").update({"content": nt}).eq("id", e['id']).execute(); st.session_state.edit_id = None; st.rerun()
         else:
-            # Ampel-Logik über st.status oder st.container mit Border
-            color = colors.get(e['category'], "blue")
             with st.container(border=True):
-                st.markdown(f":{color}[**{e['category']}**]")
+                st.markdown(f":{colors.get(e['category'], 'blue')}[**{e['category']}**]")
                 st.write(f"{e['content']}")
                 st.caption(f"💰 {e.get('cost_amount',0)}€")
-                
                 if not is_archived:
                     b1, b2, b3 = st.columns(3)
-                    if b1.button("✅", key=f"d_{e['id']}"): 
-                        supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute(); st.rerun()
-                    if b2.button("✏️", key=f"e_{e['id']}"): 
-                        st.session_state.edit_id = e['id']; st.rerun()
-                    if b3.button("🗑️", key=f"x_{e['id']}"): 
-                        supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
+                    if b1.button("✅", key=f"d_{e['id']}"): supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute(); st.rerun()
+                    if b2.button("✏️", key=f"e_{e['id']}"): st.session_state.edit_id = e['id']; st.rerun()
+                    if b3.button("🗑️", key=f"x_{e['id']}"): supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
 
 elif st.session_state.page == "📦 Lager":
     if st.button("⬅️ MENÜ"): st.session_state.page = "🏠 Home"; st.rerun()
-    mat_res = supabase.table("materials").select("*").execute()
-    materials = mat_res.data if mat_res.data else []
+    
+    # --- REPARIERTE MATERIAL-ABFRAGE ---
+    mat_query = supabase.table("materials").select("*").execute()
+    materials = mat_query.data if mat_query.data else []
     
     if not materials:
-        st.warning("Keine Materialien im Lager gefunden.")
+        st.error("Keine Materialien in der Datenbank 'materials' gefunden. Bitte Tabellenstruktur prüfen.")
     else:
-        t1, t2 = st.tabs(["📥 Inventur", "📤 Verbrauch"])
+        t1, t2 = st.tabs(["📥 Inventur (Bestand setzen)", "📤 Verbrauch buchen"])
+        
         with t1:
-            with st.form("inv"):
-                names = [i['name'] for i in materials]
-                sel = st.selectbox("Material", names)
-                q = st.number_input("Aktueller Bestand", step=1.0)
-                if st.form_submit_button("Bestand setzen"):
-                    mid = next(i for i in materials if i['name'] == sel)['id']
-                    supabase.table("materials").update({"stock_quantity": q}).eq("id", mid).execute(); st.rerun()
+            with st.form("inv_update"):
+                sel_mat = st.selectbox("Material wählen", [m['name'] for m in materials])
+                new_q = st.number_input("Aktueller Bestand (Ist-Wert)", value=0.0)
+                if st.form_submit_button("BESTAND ÜBERSCHREIBEN"):
+                    m_id = next(m for m in materials if m['name'] == sel_mat)['id']
+                    supabase.table("materials").update({"stock_quantity": new_q}).eq("id", m_id).execute(); st.rerun()
+        
         with t2:
             if not is_archived:
-                with st.form("cons"):
-                    names = [i['name'] for i in materials]
-                    sel = st.selectbox("Was wurde genutzt?", names)
-                    q = st.number_input("Menge", step=1.0)
-                    if st.form_submit_button("Buchen"):
-                        m = next(i for i in materials if i['name'] == sel)
-                        supabase.table("notes").insert({"content":f"{q}x {sel}", "category":"Material", "project_name":curr_p, "cost_amount":m['price_per_unit']*q, "is_completed":False}).execute()
-                        supabase.table("materials").update({"stock_quantity": float(m['stock_quantity'])-q}).eq("id", m['id']).execute(); st.rerun()
-        
-        st.write("### Aktuelle Bestände")
+                with st.form("cons_update"):
+                    sel_mat = st.selectbox("Verbrauchtes Material", [m['name'] for m in materials])
+                    used_q = st.number_input("Menge entnommen", value=0.0)
+                    if st.form_submit_button("BUCHUNG ABSCHICKEN"):
+                        m_data = next(m for m in materials if m['name'] == sel_mat)
+                        # In Notes eintragen
+                        supabase.table("notes").insert({"content":f"{used_q}x {sel_mat}", "category":"Material", "project_name":curr_p, "cost_amount":m_data['price_per_unit']*used_q, "is_completed":False}).execute()
+                        # Bestand im Lager abziehen
+                        new_stock = float(m_data['stock_quantity']) - used_q
+                        supabase.table("materials").update({"stock_quantity": new_stock}).eq("id", m_data['id']).execute(); st.rerun()
+
+        st.write("### Aktuelle Lagerliste")
         for m in materials:
-            st.write(f"📦 {m['name']}: **{m['stock_quantity']}**")
+            st.write(f"📦 **{m['name']}**: {m['stock_quantity']} Einheiten (Einzelpreis: {m.get('price_per_unit', 0)}€)")
