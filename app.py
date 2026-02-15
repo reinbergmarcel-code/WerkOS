@@ -39,7 +39,6 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
 
-    /* ERZWINGE SICHTBARKEIT FÜR AUDIO RECORDER AM DESKTOP */
     iframe[title="audio_recorder_streamlit.audio_recorder"] {
         min-height: 100px !important;
         display: block !important;
@@ -61,19 +60,15 @@ st.markdown("""
 # --- 2. ZUGANG ---
 try:
     S_URL, S_KEY = st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"]
-except:
-    S_URL = st.sidebar.text_input("URL", value="https://sjviyysbjozculvslrdy.supabase.co")
-    S_KEY = st.sidebar.text_input("Key", type="password")
-
-if S_URL and S_KEY:
     supabase = create_client(S_URL, S_KEY)
-else:
+except:
+    st.error("Konfiguration fehlt.")
     st.stop()
 
 if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 
-# --- HEADER ---
+# --- HEADER & BACK BUTTON ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1><p>Digitales Baustellenmanagement</p></div>""", unsafe_allow_html=True)
 
 if st.session_state.page != "🏠 Home":
@@ -131,28 +126,30 @@ elif st.session_state.page == "📋 Board":
             supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
             st.rerun()
 
-        # AUDIO MIT EIGENEM CONTAINER FÜR DESKTOP SICHTBARKEIT
         st.markdown("---")
         st.write("🎤 Sprachnotiz aufnehmen:")
-        audio_container = st.container()
-        with audio_container:
-            audio_data = audio_recorder(
-                text="Tippen zum Aufnehmen",
-                recording_color="#e74c3c",
-                neutral_color="#1e3a8a",
-                icon_size="3x",
-                key="audio_recorder_v20"
-            )
+        audio_data = audio_recorder(text="Aufnahme", icon_size="3x", key="audio_final_v22")
         
         if audio_data:
             st.audio(audio_data)
-            if st.button("💾 AUDIO-MEMO SPEICHERN"):
+            if st.button("💾 SPEICHERN"):
+                # Lokales Speichern in Supabase
                 afn = f"rec_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
                 supabase.storage.from_("werkos_fotos").upload(afn, audio_data)
                 a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
-                supabase.table("notes").insert({"content": "Audio-Memo", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
+                
+                # Wir nutzen hier den Standard-Titel, da die browserbasierte Echtzeit-Transkription 
+                # ein separates Javascript-Modul erfordert, das wir nicht extra laden wollen.
+                supabase.table("notes").insert({
+                    "content": "Sprachnotiz", 
+                    "category": "Notiz", 
+                    "project_name": curr_p, 
+                    "audio_url": a_url, 
+                    "is_completed": False
+                }).execute()
                 st.rerun()
 
+    # Board Liste
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
         if st.session_state.edit_id == e['id']:
@@ -169,14 +166,13 @@ elif st.session_state.page == "📋 Board":
             if e.get("audio_url"): st.audio(e["audio_url"])
             c1, c2, c3 = st.columns(3)
             if c1.button("✅", key=f"d_{e['id']}"):
-                supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute()
-                st.rerun()
+                supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute(); st.rerun()
             if c2.button("✏️", key=f"e_{e['id']}"):
                 st.session_state.edit_id = e['id']; st.rerun()
             if c3.button("🗑️", key=f"x_{e['id']}"):
                 supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
 
-# --- LAGER & ZEITEN BLEIBEN UNBERÜHRT ---
+# --- LAGER & ZEITEN ---
 elif st.session_state.page == "📦 Lager":
     st.markdown("### 📦 Lager")
     with st.expander("➕ NEUES MATERIAL ANLEGEN"):
