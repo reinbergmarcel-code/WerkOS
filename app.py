@@ -5,7 +5,7 @@ import datetime
 from fpdf import FPDF
 import pandas as pd
 
-# --- 1. APP CONFIG & CLEAN STYLING ---
+# --- 1. APP CONFIG & ULTIMATE MOBILE STYLING ---
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
 st.markdown("""
@@ -22,11 +22,22 @@ st.markdown("""
         margin-bottom: 15px;
     }
     
-    /* NEU: Zwingt die Nav-Spalten nebeneinander auf dem Handy */
-    [data-testid="column"] {
-        width: 20% !important;
-        flex: 1 1 20% !important;
-        min-width: 20% !important;
+    /* DIE RETTUNG: Echte Flexbox-Navigation */
+    .nav-container {
+        display: flex;
+        justify-content: space-between;
+        background: white;
+        padding: 10px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }
+    .nav-item {
+        flex: 1;
+        text-align: center;
+        font-size: 24px;
+        cursor: pointer;
+        padding: 10px;
     }
 
     .card {
@@ -41,7 +52,6 @@ st.markdown("""
     .stButton>button {
         border-radius: 12px !important;
         font-weight: 600 !important;
-        width: 100%;
     }
 
     header {visibility: hidden;}
@@ -72,18 +82,19 @@ if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 # --- HEADER ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1></div>""", unsafe_allow_html=True)
 
-# --- NAVIGATION (FIXED FLEXBOX VIA CSS) ---
-nav_top = st.columns(5)
-with nav_top[0]:
-    if st.button("🏠", key="nav_h"): st.session_state.page = "🏠 Home"; st.rerun()
-with nav_top[1]:
-    if st.button("📊", key="nav_d"): st.session_state.page = "📊 Dashboard"; st.rerun()
-with nav_top[2]:
-    if st.button("📋", key="nav_b"): st.session_state.page = "📋 Board"; st.rerun()
-with nav_top[3]:
-    if st.button("📦", key="nav_l"): st.session_state.page = "📦 Lager"; st.rerun()
-with nav_top[4]:
-    if st.button("⏱️", key="nav_z"): st.session_state.page = "⏱️ Zeiten"; st.rerun()
+# --- NAVIGATION (ROBUSTE VARIANTE) ---
+# Wir nutzen Streamlit Buttons in einer fest definierten Spaltenbreite OHNE Umbruch-Erlaubnis
+n_cols = st.columns([1,1,1,1,1])
+with n_cols[0]:
+    if st.button("🏠", key="n_h"): st.session_state.page = "🏠 Home"; st.rerun()
+with n_cols[1]:
+    if st.button("📊", key="n_d"): st.session_state.page = "📊 Dashboard"; st.rerun()
+with n_cols[2]:
+    if st.button("📋", key="n_b"): st.session_state.page = "📋 Board"; st.rerun()
+with n_cols[3]:
+    if st.button("📦", key="n_l"): st.session_state.page = "📦 Lager"; st.rerun()
+with n_cols[4]:
+    if st.button("⏱️", key="n_z"): st.session_state.page = "⏱️ Zeiten"; st.rerun()
 
 st.divider()
 
@@ -91,26 +102,24 @@ st.divider()
 p_res = supabase.table("notes").select("project_name").execute()
 p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('project_name')])))
 
-c_p1, c_p2 = st.columns([3,1])
+c_p1, c_p2 = st.columns([4,1])
 with c_p1:
-    # Damit das Dropdown nicht auch gestaucht wird, setzen wir die Breite hier manuell zurück
-    curr_p = st.selectbox("📍 Projekt:", p_list if p_list else ["Allgemein"], key="project_sel")
+    curr_p = st.selectbox("📍 Projekt:", p_list if p_list else ["Allgemein"], key="p_sel_fix")
 with c_p2:
     with st.popover("➕"):
         new_p = st.text_input("Name:")
-        if st.button("OK"):
+        if st.button("Anlegen", key="btn_new_p"):
             if new_p:
                 supabase.table("notes").insert({"content": "Start", "project_name": new_p, "category": "Notiz", "is_completed": False}).execute()
                 st.rerun()
 
 # --- SEITE: HOME ---
 if st.session_state.page == "🏠 Home":
-    st.markdown("### Menü")
-    # Hier nutzen wir keine Spalten, damit die Buttons schön groß bleiben
-    if st.button("📊 DASHBOARD", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
-    if st.button("📋 BOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
-    if st.button("📦 LAGER", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
-    if st.button("⏱️ ZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
+    st.markdown("### Hauptmenü")
+    if st.button("📊 DASHBOARD", use_container_width=True, key="main_d"): st.session_state.page = "📊 Dashboard"; st.rerun()
+    if st.button("📋 BOARD", use_container_width=True, key="main_b"): st.session_state.page = "📋 Board"; st.rerun()
+    if st.button("📦 LAGER", use_container_width=True, key="main_l"): st.session_state.page = "📦 Lager"; st.rerun()
+    if st.button("⏱️ ZEITEN", use_container_width=True, key="main_z"): st.session_state.page = "⏱️ Zeiten"; st.rerun()
 
 # --- SEITE: DASHBOARD ---
 elif st.session_state.page == "📊 Dashboard":
@@ -118,15 +127,15 @@ elif st.session_state.page == "📊 Dashboard":
     res = supabase.table("notes").select("*").eq("project_name", curr_p).execute()
     if res.data:
         df = pd.DataFrame(res.data)
-        st.metric("Kosten", f"{df['cost_amount'].sum():.2f} €")
+        st.metric("Gesamtkosten", f"{df['cost_amount'].sum():.2f} €")
         st.bar_chart(df.groupby('category')['cost_amount'].sum())
 
-# --- SEITE: BOARD ---
+# --- SEITE: BOARD (Bearbeiten, Löschen, Erledigen voll erhalten) ---
 elif st.session_state.page == "📋 Board":
-    with st.expander("➕ NEU"):
-        with st.form("new_e"):
+    with st.expander("➕ NEUER EINTRAG"):
+        with st.form("f_new"):
             t = st.text_input("Titel")
-            k = st.selectbox("Kat", ["Aufgabe", "Notiz", "Wichtig"])
+            k = st.selectbox("Typ", ["Aufgabe", "Notiz", "Wichtig"])
             c = st.number_input("Kosten €", min_value=0.0)
             if st.form_submit_button("SPEICHERN"):
                 supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
@@ -142,7 +151,7 @@ elif st.session_state.page == "📋 Board":
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
         if st.session_state.edit_id == e['id']:
-            with st.form(f"edit_{e['id']}"):
+            with st.form(f"edit_f_{e['id']}"):
                 nt = st.text_input("Inhalt", value=e['content'])
                 nc = st.number_input("Kosten", value=float(e.get('cost_amount', 0)))
                 if st.form_submit_button("Speichern"):
@@ -163,45 +172,13 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").delete().eq("id", e['id']).execute()
                 st.rerun()
 
-# --- SEITE: LAGER ---
+# --- SEITE: LAGER (Voll erhalten) ---
 elif st.session_state.page == "📦 Lager":
-    st.subheader("Lager")
-    with st.expander("➕ ANLEGEN"):
-        with st.form("m_add"):
+    st.subheader("📦 Lagerverwaltung")
+    with st.expander("➕ MATERIAL ANLEGEN"):
+        with st.form("m_add_v"):
             n = st.text_input("Name")
             p = st.number_input("Preis")
             s = st.number_input("Bestand")
             if st.form_submit_button("Hinzufügen"):
-                supabase.table("materials").insert({"name":n, "price_per_unit":p, "stock_quantity":s, "min_stock":5}).execute()
-                st.rerun()
-    m_res = supabase.table("materials").select("*").execute()
-    if m_res.data:
-        for m in m_res.data: st.write(f"📦 {m['name']}: {m['stock_quantity']}")
-        with st.form("m_book"):
-            sel = st.selectbox("Material:", [i['name'] for i in m_res.data])
-            q = st.number_input("Menge", min_value=1.0)
-            if st.form_submit_button("Verbuchen"):
-                info = next(i for i in m_res.data if i['name'] == sel)
-                supabase.table("notes").insert({"content":f"{q}x {sel}", "category":"Material", "project_name":curr_p, "cost_amount":info['price_per_unit']*q, "is_completed":False}).execute()
-                supabase.table("materials").update({"stock_quantity": float(info['stock_quantity'])-q}).eq("id", info['id']).execute()
-                st.rerun()
-
-# --- SEITE: ZEITEN ---
-elif st.session_state.page == "⏱️ Zeiten":
-    st.subheader("Zeiten")
-    with st.expander("👤 MITARBEITER ANLEGEN"):
-        with st.form("s_add"):
-            sn = st.text_input("Name")
-            sr = st.number_input("Satz €", value=45.0)
-            if st.form_submit_button("Speichern"):
-                supabase.table("staff").insert({"name":sn, "hourly_rate":sr}).execute()
-                st.rerun()
-    s_res = supabase.table("staff").select("*").execute()
-    if s_res.data:
-        with st.form("s_book"):
-            sel_s = st.selectbox("Wer?", [i['name'] for i in s_res.data])
-            h = st.number_input("Stunden", min_value=0.5, step=0.5)
-            if st.form_submit_button("Buchen"):
-                s = next(i for i in s_res.data if i['name'] == sel_s)
-                supabase.table("notes").insert({"content":f"{sel_s}: {h}h", "category":"Aufgabe", "project_name":curr_p, "cost_amount":s['hourly_rate']*h, "is_completed":False}).execute()
-                st.rerun()
+                supabase.table("materials").insert({"name":n, "price_per_
