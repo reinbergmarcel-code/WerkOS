@@ -5,25 +5,50 @@ import datetime
 from fpdf import FPDF
 import pandas as pd
 
-# --- 1. APP CONFIG & STYLE ---
+# --- 1. APP CONFIG & ULTIMATE STYLING ---
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
 st.markdown("""
     <style>
-    [data-testid="stAppViewContainer"] { background-color: #f8f9fa; }
-    .entry-card {
-        background: white;
-        padding: 15px;
-        border-radius: 15px;
-        border-left: 6px solid #1e3a8a;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-        margin-bottom: 5px;
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+    html, body, [class*="css"] { font-family: 'Poppins', sans-serif; background-color: #F4F7FB; }
+    
+    .app-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+        padding: 20px;
+        border-radius: 0 0 25px 25px;
+        color: white;
+        text-align: center;
+        margin-bottom: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
-    .stButton>button { border-radius: 10px !important; font-weight: 600 !important; }
-    /* Roter Button für Löschen */
-    div.stButton > button:first-child[key^="del_"] { background-color: #ff4b4b !important; color: white !important; }
-    /* Gelber Button für Ändern */
-    div.stButton > button:first-child[key^="edit_"] { background-color: #f1c40f !important; color: black !important; }
+    
+    .stButton>button {
+        border-radius: 18px !important;
+        height: 4rem !important;
+        font-size: 1rem !important;
+        background: white !important;
+        color: #1e3a8a !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+    }
+
+    .card {
+        background: white;
+        padding: 20px;
+        border-radius: 20px;
+        margin-bottom: 15px;
+        box-shadow: 0 10px 20px rgba(0,0,0,0.03);
+        border-left: 6px solid #3b82f6;
+    }
+    
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* Spezifische Button-Farben */
+    div.stButton > button[key^="d_"] { background-color: #2ecc71 !important; color: white !important; height: 3rem !important; }
+    div.stButton > button[key^="e_"] { background-color: #f1c40f !important; color: black !important; height: 3rem !important; }
+    div.stButton > button[key^="x_"] { background-color: #e74c3c !important; color: white !important; height: 3rem !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -39,55 +64,65 @@ if S_URL and S_KEY:
 else:
     st.stop()
 
-# --- 3. NAVIGATION LOGIK ---
+# --- 3. SESSION STATE ---
 if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
+
+# --- HEADER ---
+st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1><p>Digitales Baustellenmanagement</p></div>""", unsafe_allow_html=True)
 
 p_res = supabase.table("notes").select("project_name").execute()
 p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('project_name')])))
 
-st.markdown("<h1 style='text-align: center;'>🏗️ WerkOS Pro</h1>", unsafe_allow_html=True)
-
-col_p1, col_p2 = st.columns([3,1])
-with col_p1:
+c_top1, c_top2 = st.columns([3,1])
+with c_top1:
     curr_p = st.selectbox("📍 Baustelle:", p_list if p_list else ["Allgemein"])
-with col_p2:
-    with st.popover("➕ Neu"):
+with c_top2:
+    with st.popover("➕ Projekt"):
         new_p = st.text_input("Name:")
         if st.button("Anlegen"):
             if new_p:
-                supabase.table("notes").insert({"content": "Projekt angelegt", "project_name": new_p, "category": "Notiz", "is_completed": False}).execute()
+                supabase.table("notes").insert({"content": "Start", "project_name": new_p, "category": "Notiz", "is_completed": False}).execute()
                 st.rerun()
 
 st.divider()
 
 if st.session_state.page != "🏠 Home":
-    if st.button("⬅️ Menü"):
+    if st.button("⬅️ MENÜ"):
         st.session_state.page = "🏠 Home"
         st.session_state.edit_id = None
         st.rerun()
 
 # --- SEITE: HOME ---
 if st.session_state.page == "🏠 Home":
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("📊\nDash", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
-        if st.button("📦\nLager", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
-    with c2:
-        if st.button("📋\nBoard", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
-        if st.button("⏱️\nZeit", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📊\nDASHBOARD", use_container_width=True): st.session_state.page = "📊 Dashboard"; st.rerun()
+        if st.button("📦\nLAGER", use_container_width=True): st.session_state.page = "📦 Lager"; st.rerun()
+    with col2:
+        if st.button("📋\nBOARD", use_container_width=True): st.session_state.page = "📋 Board"; st.rerun()
+        if st.button("⏱️\nZEITEN", use_container_width=True): st.session_state.page = "⏱️ Zeiten"; st.rerun()
 
-# --- SEITE: BOARD (MIT ÄNDERN-FUNKTION) ---
+# --- SEITE: DASHBOARD ---
+elif st.session_state.page == "📊 Dashboard":
+    st.markdown(f"### 📊 Dashboard: {curr_p}")
+    res = supabase.table("notes").select("*").eq("project_name", curr_p).execute()
+    if res.data:
+        df = pd.DataFrame(res.data)
+        st.metric("Gesamtkosten", f"{df['cost_amount'].sum():.2f} €")
+        st.bar_chart(df.groupby('category')['cost_amount'].sum())
+
+# --- SEITE: BOARD ---
 elif st.session_state.page == "📋 Board":
-    with st.expander("📝 Neu / Foto", expanded=False):
-        with st.form("new_entry"):
+    with st.expander("➕ NEUER EINTRAG / FOTO"):
+        with st.form("new_e"):
             t = st.text_input("Titel")
-            k = st.selectbox("Typ", ["Aufgabe", "Notiz", "Wichtig"])
+            k = st.selectbox("Kat", ["Aufgabe", "Notiz", "Wichtig"])
             c = st.number_input("Kosten €", min_value=0.0)
-            if st.form_submit_button("Speichern"):
+            if st.form_submit_button("SPEICHERN"):
                 supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
                 st.rerun()
-        img = st.camera_input("Foto")
+        img = st.camera_input("Kamera")
         if img:
             fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
             supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
@@ -97,53 +132,43 @@ elif st.session_state.page == "📋 Board":
 
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
-        # Falls dieser Eintrag gerade bearbeitet wird
         if st.session_state.edit_id == e['id']:
-            with st.container():
-                st.markdown("### ✏️ Eintrag bearbeiten")
-                with st.form(f"edit_form_{e['id']}"):
-                    new_txt = st.text_input("Inhalt", value=e['content'])
-                    new_cost = st.number_input("Kosten €", value=float(e.get('cost_amount', 0)))
-                    col_eb1, col_eb2 = st.columns(2)
-                    if col_eb1.form_submit_button("💾 Speichern"):
-                        supabase.table("notes").update({"content": new_txt, "cost_amount": new_cost}).eq("id", e['id']).execute()
-                        st.session_state.edit_id = None
-                        st.rerun()
-                    if col_eb2.form_submit_button("❌ Abbrechen"):
-                        st.session_state.edit_id = None
-                        st.rerun()
+            with st.form(f"edit_{e['id']}"):
+                nt = st.text_input("Inhalt", value=e['content'])
+                nc = st.number_input("Kosten", value=float(e.get('cost_amount', 0)))
+                if st.form_submit_button("Speichern"):
+                    supabase.table("notes").update({"content": nt, "cost_amount": nc}).eq("id", e['id']).execute()
+                    st.session_state.edit_id = None
+                    st.rerun()
         else:
-            # Normale Anzeige
-            st.markdown(f"""<div class="entry-card"><strong>{e['category']}</strong><br>{e['content']}<br><small>{e.get('cost_amount',0)} €</small></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div class="card"><strong>{e['category']}</strong><br>{e['content']}<br><small>{e.get('cost_amount',0)} €</small></div>""", unsafe_allow_html=True)
             if e.get("image_url"): st.image(e["image_url"])
-            
             c1, c2, c3 = st.columns(3)
-            if c1.button("✅", key=f"done_{e['id']}"):
+            if c1.button("✅", key=f"d_{e['id']}"):
                 supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute()
                 st.rerun()
-            if c2.button("✏️", key=f"edit_{e['id']}"):
+            if c2.button("✏️", key=f"e_{e['id']}"):
                 st.session_state.edit_id = e['id']
                 st.rerun()
-            if c3.button("🗑️", key=f"del_{e['id']}"):
+            if c3.button("🗑️", key=f"x_{e['id']}"):
                 supabase.table("notes").delete().eq("id", e['id']).execute()
                 st.rerun()
-        st.divider()
 
-# --- SEITE: LAGER (ANALOG ZU VORHER) ---
+# --- SEITE: LAGER ---
 elif st.session_state.page == "📦 Lager":
-    st.subheader("Lager")
-    with st.expander("➕ Neues Material anlegen"):
-        with st.form("new_mat"):
+    st.markdown("### 📦 Lager")
+    with st.expander("➕ NEUES MATERIAL ANLEGEN"):
+        with st.form("m_add"):
             n = st.text_input("Name")
             p = st.number_input("Preis")
             s = st.number_input("Bestand")
-            if st.form_submit_button("Hinzufügen"):
+            if st.form_submit_button("Anlegen"):
                 supabase.table("materials").insert({"name":n, "price_per_unit":p, "stock_quantity":s, "min_stock":5}).execute()
                 st.rerun()
     m_res = supabase.table("materials").select("*").execute()
     if m_res.data:
         for m in m_res.data: st.write(f"📦 {m['name']}: {m['stock_quantity']}")
-        with st.form("book_m"):
+        with st.form("m_book"):
             sel = st.selectbox("Material:", [i['name'] for i in m_res.data])
             q = st.number_input("Menge", min_value=1.0)
             if st.form_submit_button("Verbuchen"):
@@ -152,31 +177,22 @@ elif st.session_state.page == "📦 Lager":
                 supabase.table("materials").update({"stock_quantity": float(info['stock_quantity'])-q}).eq("id", info['id']).execute()
                 st.rerun()
 
-# --- SEITE: ZEIT (ANALOG ZU VORHER) ---
+# --- SEITE: ZEITEN ---
 elif st.session_state.page == "⏱️ Zeiten":
-    st.subheader("Zeiten")
-    with st.expander("👤 Neuer Mitarbeiter"):
-        with st.form("new_st"):
+    st.markdown("### ⏱️ Zeiten")
+    with st.expander("👤 NEUER MITARBEITER"):
+        with st.form("s_add"):
             sn = st.text_input("Name")
             sr = st.number_input("Satz €", value=45.0)
-            if st.form_submit_button("Anlegen"):
+            if st.form_submit_button("Speichern"):
                 supabase.table("staff").insert({"name":sn, "hourly_rate":sr}).execute()
                 st.rerun()
     s_res = supabase.table("staff").select("*").execute()
     if s_res.data:
-        with st.form("book_t"):
-            sel_s = st.selectbox("Mitarbeiter:", [i['name'] for i in s_res.data])
+        with st.form("s_book"):
+            sel_s = st.selectbox("Wer?", [i['name'] for i in s_res.data])
             h = st.number_input("Stunden", min_value=0.5, step=0.5)
             if st.form_submit_button("Buchen"):
                 s = next(i for i in s_res.data if i['name'] == sel_s)
                 supabase.table("notes").insert({"content":f"{sel_s}: {h}h", "category":"Aufgabe", "project_name":curr_p, "cost_amount":s['hourly_rate']*h, "is_completed":False}).execute()
                 st.rerun()
-
-# --- SEITE: DASHBOARD ---
-elif st.session_state.page == "📊 Dashboard":
-    st.subheader(f"Statistik: {curr_p}")
-    res = supabase.table("notes").select("*").eq("project_name", curr_p).execute()
-    if res.data:
-        df = pd.DataFrame(res.data)
-        st.metric("Gesamtkosten", f"{df['cost_amount'].sum():.2f} €")
-        st.bar_chart(df.groupby('category')['cost_amount'].sum())
