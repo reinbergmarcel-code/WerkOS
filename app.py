@@ -50,18 +50,16 @@ st.markdown("""
     div.stButton > button[key^="e_"] { background-color: #f1c40f !important; color: black !important; height: 3rem !important; }
     div.stButton > button[key^="x_"] { background-color: #e74c3c !important; color: white !important; height: 3rem !important; }
 
-    /* NEU: Fixierte Bottom Navigation */
-    .nav-bar {
+    /* FIXIERTE NAVIGATION UNTEN */
+    div[data-testid="stVerticalBlock"] > div:last-child {
         position: fixed;
         bottom: 0;
         left: 0;
         width: 100%;
         background: white;
-        display: flex;
-        justify-content: space-around;
-        padding: 10px 0;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
         z-index: 1000;
+        padding: 10px;
+        box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
     }
     </style>
     """, unsafe_allow_html=True)
@@ -119,3 +117,112 @@ elif st.session_state.page == "📊 Dashboard":
         df = pd.DataFrame(res.data)
         st.metric("Gesamtkosten", f"{df['cost_amount'].sum():.2f} €")
         st.bar_chart(df.groupby('category')['cost_amount'].sum())
+
+# --- SEITE: BOARD ---
+elif st.session_state.page == "📋 Board":
+    with st.expander("➕ NEUER EINTRAG / FOTO"):
+        with st.form("new_e"):
+            t = st.text_input("Titel")
+            k = st.selectbox("Kat", ["Aufgabe", "Notiz", "Wichtig"])
+            c = st.number_input("Kosten €", min_value=0.0)
+            if st.form_submit_button("SPEICHERN"):
+                supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
+                st.rerun()
+        img = st.camera_input("Kamera")
+        if img:
+            fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
+            supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
+            url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
+            supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
+            st.rerun()
+
+    res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
+    for e in res.data:
+        if st.session_state.edit_id == e['id']:
+            with st.form(f"edit_{e['id']}"):
+                nt = st.text_input("Inhalt", value=e['content'])
+                nc = st.number_input("Kosten", value=float(e.get('cost_amount', 0)))
+                if st.form_submit_button("Speichern"):
+                    supabase.table("notes").update({"content": nt, "cost_amount": nc}).eq("id", e['id']).execute()
+                    st.session_state.edit_id = None
+                    st.rerun()
+        else:
+            st.markdown(f"""<div class="card"><strong>{e['category']}</strong><br>{e['content']}<br><small>{e.get('cost_amount',0)} €</small></div>""", unsafe_allow_html=True)
+            if e.get("image_url"): st.image(e["image_url"])
+            c1, c2, c3 = st.columns(3)
+            if c1.button("✅", key=f"d_{e['id']}"):
+                supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute()
+                st.rerun()
+            if c2.button("✏️", key=f"e_{e['id']}"):
+                st.session_state.edit_id = e['id']
+                st.rerun()
+            if c3.button("🗑️", key=f"x_{e['id']}"):
+                supabase.table("notes").delete().eq("id", e['id']).execute()
+                st.rerun()
+
+# --- SEITE: LAGER ---
+elif st.session_state.page == "📦 Lager":
+    st.markdown("### 📦 Lager")
+    with st.expander("➕ NEUES MATERIAL ANLEGEN"):
+        with st.form("m_add"):
+            n = st.text_input("Name")
+            p = st.number_input("Preis")
+            s = st.number_input("Bestand")
+            if st.form_submit_button("Anlegen"):
+                supabase.table("materials").insert({"name":n, "price_per_unit":p, "stock_quantity":s, "min_stock":5}).execute()
+                st.rerun()
+    m_res = supabase.table("materials").select("*").execute()
+    if m_res.data:
+        for m in m_res.data: st.write(f"📦 {m['name']}: {m['stock_quantity']}")
+        with st.form("m_book"):
+            sel = st.selectbox("Material:", [i['name'] for i in m_res.data])
+            q = st.number_input("Menge", min_value=1.0)
+            if st.form_submit_button("Verbuchen"):
+                info = next(i for i in m_res.data if i['name'] == sel)
+                supabase.table("notes").insert({"content":f"{q}x {sel}", "category":"Material", "project_name":curr_p, "cost_amount":info['price_per_unit']*q, "is_completed":False}).execute()
+                supabase.table("materials").update({"stock_quantity": float(info['stock_quantity'])-q}).eq("id", info['id']).execute()
+                st.rerun()
+
+# --- SEITE: ZEITEN ---
+elif st.session_state.page == "⏱️ Zeiten":
+    st.markdown("### ⏱️ Zeiten")
+    with st.expander("👤 NEUER MITARBEITER"):
+        with st.form("s_add"):
+            sn = st.text_input("Name")
+            sr = st.number_input("Satz €", value=45.0)
+            if st.form_submit_button("Speichern"):
+                supabase.table("staff").insert({"name":sn, "hourly_rate":sr}).execute()
+                st.rerun()
+    s_res = supabase.table("staff").select("*").execute()
+    if s_res.data:
+        with st.form("s_book"):
+            sel_s = st.selectbox("Wer?", [i['name'] for i in s_res.data])
+            h = st.number_input("Stunden", min_value=0.5, step=0.5)
+            if st.form_submit_button("Buchen"):
+                s = next(i for i in s_res.data if i['name'] == sel_s)
+                supabase.table("notes").insert({"content":f"{sel_s}: {h}h", "category":"Aufgabe", "project_name":curr_p, "cost_amount":s['hourly_rate']*h, "is_completed":False}).execute()
+                st.rerun()
+
+# --- FIXIERTE NAVIGATION UNTEN ---
+st.markdown("<div style='height: 100px;'></div>", unsafe_allow_html=True) # Abstandhalter
+nav_cols = st.columns(5)
+with nav_cols[0]:
+    if st.button("🏠", key="fix_home"):
+        st.session_state.page = "🏠 Home"
+        st.rerun()
+with nav_cols[1]:
+    if st.button("📊", key="fix_dash"):
+        st.session_state.page = "📊 Dashboard"
+        st.rerun()
+with nav_cols[2]:
+    if st.button("📋", key="fix_board"):
+        st.session_state.page = "📋 Board"
+        st.rerun()
+with nav_cols[3]:
+    if st.button("📦", key="fix_lager"):
+        st.session_state.page = "📦 Lager"
+        st.rerun()
+with nav_cols[4]:
+    if st.button("⏱️", key="fix_zeit"):
+        st.session_state.page = "⏱️ Zeiten"
+        st.rerun()
