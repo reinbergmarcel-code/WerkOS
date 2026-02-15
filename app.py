@@ -4,7 +4,7 @@ from supabase import create_client
 import datetime
 import pandas as pd
 
-# --- 1. APP CONFIG & ORIGINAL STYLING ---
+# --- 1. APP CONFIG & ORIGINAL STYLING (v2.26 + Desktop Text Fix) ---
 st.set_page_config(page_title="WerkOS Pro", page_icon="🏗️", layout="wide")
 
 st.markdown("""
@@ -33,13 +33,19 @@ st.markdown("""
     .card-wichtig { border-left: 10px solid #e74c3c !important; }
     .card-material { border-left: 10px solid #95a5a6 !important; }
 
+    /* VERBESSERTE CARD FÜR DESKTOP TEXT-SICHTBARKEIT */
     .card {
-        background: white;
+        background: white !important;
         padding: 20px;
         border-radius: 20px;
         margin-bottom: 15px;
         box-shadow: 0 10px 20px rgba(0,0,0,0.03);
+        color: #1e293b !important; /* Erzwingt dunkle Schriftfarbe */
     }
+    
+    /* Sicherstellen, dass Text in der Karte immer sichtbar ist */
+    .card strong { color: #1e3a8a !important; }
+    .card div { color: #1e293b !important; }
     
     header {visibility: hidden;}
     footer {visibility: hidden;}
@@ -81,7 +87,7 @@ if st.session_state.page != "🏠 Home":
         st.session_state.page = "🏠 Home"
         st.rerun()
 
-# Projektwahl
+# Projektwahl (Laden der aktuellen Projekte)
 p_res = supabase.table("notes").select("project_name").execute()
 p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('project_name')])))
 c_top1, c_top2 = st.columns([3,1])
@@ -133,7 +139,7 @@ elif st.session_state.page == "📋 Board":
 
         st.markdown("---")
         st.write("🎤 Sprachnotiz:")
-        audio_data = audio_recorder(text="Aufnahme", icon_size="3x", key="audio_v26_final")
+        audio_data = audio_recorder(text="Aufnahme", icon_size="3x", key="audio_v27_final")
         
         if audio_data:
             st.audio(audio_data)
@@ -144,9 +150,9 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
                 st.rerun()
 
+    # Board Liste mit Desktop Text-Fix
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
-        # AMPEL LOGIK ZUWEISUNG
         cat_class = f"card-{e['category'].lower()}"
         if st.session_state.edit_id == e['id']:
             with st.form(f"edit_{e['id']}"):
@@ -157,7 +163,15 @@ elif st.session_state.page == "📋 Board":
                     st.session_state.edit_id = None
                     st.rerun()
         else:
-            st.markdown(f"""<div class="card {cat_class}"><strong>{e['category']}</strong><br>{e['content']}<br><small>{e.get('cost_amount',0)} €</small></div>""", unsafe_allow_html=True)
+            # Hier wird der Text explizit für den Desktop gerendert
+            st.markdown(f"""
+                <div class="card {cat_class}">
+                    <strong>{e['category']}</strong>
+                    <div style="margin-top: 5px; font-weight: 500;">{e['content']}</div>
+                    <div style="font-size: 0.85rem; margin-top: 5px; color: #64748b;">💰 {e.get('cost_amount',0)} €</div>
+                </div>
+            """, unsafe_allow_html=True)
+            
             if e.get("image_url"): st.image(e["image_url"])
             if e.get("audio_url"): st.audio(e["audio_url"])
             c1, c2, c3 = st.columns(3)
@@ -204,7 +218,6 @@ elif st.session_state.page == "📦 Lager":
                 st.rerun()
 
 elif st.session_state.page == "⏱️ Zeiten":
-    # ... (Stunden-Logik wie v2.22/v2.25)
     st.markdown("### ⏱️ Zeiten")
     s_res = supabase.table("staff").select("*").execute()
     if s_res.data:
