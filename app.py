@@ -2,7 +2,6 @@ import streamlit as st
 from audio_recorder_streamlit import audio_recorder
 from supabase import create_client
 import datetime
-from fpdf import FPDF
 import pandas as pd
 
 # --- 1. APP CONFIG & ORIGINAL STYLING ---
@@ -20,17 +19,12 @@ st.markdown("""
         color: white;
         text-align: center;
         margin-bottom: 25px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
     
     .stButton>button {
         border-radius: 18px !important;
         height: 4rem !important;
-        font-size: 1rem !important;
-        background: white !important;
-        color: #1e3a8a !important;
-        border: none !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05) !important;
+        font-weight: 600 !important;
     }
 
     .card {
@@ -55,13 +49,6 @@ st.markdown("""
         height: 3rem !important;
         margin-bottom: 20px !important;
     }
-
-    /* Sicherstellen, dass der Audio-Recorder Container sichtbar ist */
-    .stAudioRecorder {
-        display: flex !important;
-        justify-content: center !important;
-        margin: 10px 0 !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -77,14 +64,12 @@ if S_URL and S_KEY:
 else:
     st.stop()
 
-# --- 3. SESSION STATE ---
 if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 
-# --- HEADER ---
+# --- HEADER & BACK BUTTON ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1><p>Digitales Baustellenmanagement</p></div>""", unsafe_allow_html=True)
 
-# --- RÜCKWEG-BUTTON ---
 if st.session_state.page != "🏠 Home":
     if st.button("⬅️ ZURÜCK ZUM MENÜ", key="back_to_menu", use_container_width=True):
         st.session_state.page = "🏠 Home"
@@ -93,10 +78,8 @@ if st.session_state.page != "🏠 Home":
 # Projektwahl
 p_res = supabase.table("notes").select("project_name").execute()
 p_list = sorted(list(set([e['project_name'] for e in p_res.data if e.get('project_name')])))
-
 c_top1, c_top2 = st.columns([3,1])
-with c_top1:
-    curr_p = st.selectbox("📍 Baustelle:", p_list if p_list else ["Allgemein"])
+curr_p = c_top1.selectbox("📍 Baustelle:", p_list if p_list else ["Allgemein"])
 with c_top2:
     with st.popover("➕ Projekt"):
         new_p = st.text_input("Name:")
@@ -104,7 +87,6 @@ with c_top2:
             if new_p:
                 supabase.table("notes").insert({"content": "Start", "project_name": new_p, "category": "Notiz", "is_completed": False}).execute()
                 st.rerun()
-
 st.divider()
 
 # --- SEITEN LOGIK ---
@@ -135,6 +117,7 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
                 st.rerun()
         
+        # FOTO
         img = st.camera_input("Kamera")
         if img:
             fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
@@ -143,24 +126,16 @@ elif st.session_state.page == "📋 Board":
             supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
             st.rerun()
 
-        # AUDIO (ERWEITERT FÜR DESKTOP)
-        st.write("🎤 Sprachnotiz aufnehmen:")
-        audio_bytes = audio_recorder(
-            text="Klick zum Starten/Stoppen",
-            recording_color="#e74c3c",
-            neutral_color="#1e3a8a",
-            icon_size="3x",
-            key="recorder_desktop"
-        )
-        
-        if audio_bytes:
-            st.audio(audio_bytes, format="audio/wav")
-            if st.button("💾 AUDIO-NOTIZ SPEICHERN", use_container_width=True):
-                afn = f"audio_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
-                supabase.storage.from_("werkos_fotos").upload(afn, audio_bytes)
+        # AUDIO (VEREINFACHT FÜR CHROME DESKTOP)
+        st.write("🎤 Sprachnotiz:")
+        audio_data = audio_recorder(text="Aufnahme", icon_size="2x", key="audio_final")
+        if audio_data:
+            st.audio(audio_data)
+            if st.button("💾 SPEICHERN"):
+                afn = f"rec_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
+                supabase.storage.from_("werkos_fotos").upload(afn, audio_data)
                 a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
-                supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
-                st.success("Audio gespeichert!")
+                supabase.table("notes").insert({"content": "Audio-Memo", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
                 st.rerun()
 
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
@@ -182,11 +157,9 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute()
                 st.rerun()
             if c2.button("✏️", key=f"e_{e['id']}"):
-                st.session_state.edit_id = e['id']
-                st.rerun()
+                st.session_state.edit_id = e['id']; st.rerun()
             if c3.button("🗑️", key=f"x_{e['id']}"):
-                supabase.table("notes").delete().eq("id", e['id']).execute()
-                st.rerun()
+                supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
 
 elif st.session_state.page == "📦 Lager":
     st.markdown("### 📦 Lager")
