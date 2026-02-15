@@ -55,6 +55,13 @@ st.markdown("""
         height: 3rem !important;
         margin-bottom: 20px !important;
     }
+
+    /* Sicherstellen, dass der Audio-Recorder Container sichtbar ist */
+    .stAudioRecorder {
+        display: flex !important;
+        justify-content: center !important;
+        margin: 10px 0 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -128,7 +135,6 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
                 st.rerun()
         
-        # FOTO
         img = st.camera_input("Kamera")
         if img:
             fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
@@ -137,20 +143,25 @@ elif st.session_state.page == "📋 Board":
             supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
             st.rerun()
 
-        # AUDIO (ROBUSTE VERSION)
-        st.write("🎤 Sprachnotiz:")
-        try:
-            audio_bytes = audio_recorder(text="Tippen zum Aufnehmen", recording_color="#e74c3c", neutral_color="#1e3a8a", icon_size="2x", key="recorder_fixed")
-            if audio_bytes:
-                st.audio(audio_bytes, format="audio/wav")
-                if st.button("🎤 AUFNAHME SPEICHERN", key="save_audio"):
-                    afn = f"audio_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
-                    supabase.storage.from_("werkos_fotos").upload(afn, audio_bytes)
-                    a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
-                    supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
-                    st.rerun()
-        except Exception as e:
-            st.error(f"Fehler: {e}")
+        # AUDIO (ERWEITERT FÜR DESKTOP)
+        st.write("🎤 Sprachnotiz aufnehmen:")
+        audio_bytes = audio_recorder(
+            text="Klick zum Starten/Stoppen",
+            recording_color="#e74c3c",
+            neutral_color="#1e3a8a",
+            icon_size="3x",
+            key="recorder_desktop"
+        )
+        
+        if audio_bytes:
+            st.audio(audio_bytes, format="audio/wav")
+            if st.button("💾 AUDIO-NOTIZ SPEICHERN", use_container_width=True):
+                afn = f"audio_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
+                supabase.storage.from_("werkos_fotos").upload(afn, audio_bytes)
+                a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
+                supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
+                st.success("Audio gespeichert!")
+                st.rerun()
 
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
