@@ -14,7 +14,7 @@ except:
 if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 
-st.title("WerkOS Pro")
+st.title("WerkOS Pro 🏗️")
 
 # 3. DATEN ABFRAGEN
 res = supabase.table("notes").select("*").execute()
@@ -22,14 +22,14 @@ all_data = res.data if res.data else []
 all_p = sorted(list(set([e['project_name'] for e in all_data if e.get('project_name')])))
 arch_p = list(set([e['project_name'] for e in all_data if e['content'] == "PROJECT_ARCHIVED"]))
 
-# 4. KOPFZEILE (PROJEKTE)
+# 4. PROJEKT-VERWALTUNG
 c1, c2 = st.columns([3, 1])
 with c1:
     show_arch = st.checkbox("Archiv anzeigen")
     curr_p = st.selectbox("📍 Baustelle", [p for p in all_p if p not in arch_p] if not show_arch else all_p)
 with c2:
     with st.popover("➕ Neu"):
-        np = st.text_input("Projektname:")
+        np = st.text_input("Name:")
         if st.button("Anlegen"):
             if np: 
                 supabase.table("notes").insert({"content": "Start", "project_name": np, "category": "Notiz", "is_completed": False}).execute()
@@ -71,6 +71,10 @@ elif st.session_state.page == "📋 Board":
                     st.rerun()
 
     items = [e for e in all_data if e['project_name'] == curr_p and not e['is_completed'] and e['content'] != "PROJECT_ARCHIVED"]
+    
+    # Ampel-Farben Mapping
+    colors = {"Notiz": "blue", "Aufgabe": "orange", "Wichtig": "red", "Material": "gray"}
+
     for e in items:
         if st.session_state.edit_id == e['id']:
             with st.form(f"ed_{e['id']}"):
@@ -79,35 +83,50 @@ elif st.session_state.page == "📋 Board":
                     supabase.table("notes").update({"content": nt}).eq("id", e['id']).execute()
                     st.session_state.edit_id = None; st.rerun()
         else:
-            st.info(f"**{e['category']}**: {e['content']} (💰 {e.get('cost_amount',0)}€)")
-            if not is_archived:
-                b1, b2, b3 = st.columns(3)
-                if b1.button("✅", key=f"d_{e['id']}"): 
-                    supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute(); st.rerun()
-                if b2.button("✏️", key=f"e_{e['id']}"): 
-                    st.session_state.edit_id = e['id']; st.rerun()
-                if b3.button("🗑️", key=f"x_{e['id']}"): 
-                    supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
+            # Ampel-Logik über st.status oder st.container mit Border
+            color = colors.get(e['category'], "blue")
+            with st.container(border=True):
+                st.markdown(f":{color}[**{e['category']}**]")
+                st.write(f"{e['content']}")
+                st.caption(f"💰 {e.get('cost_amount',0)}€")
+                
+                if not is_archived:
+                    b1, b2, b3 = st.columns(3)
+                    if b1.button("✅", key=f"d_{e['id']}"): 
+                        supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute(); st.rerun()
+                    if b2.button("✏️", key=f"e_{e['id']}"): 
+                        st.session_state.edit_id = e['id']; st.rerun()
+                    if b3.button("🗑️", key=f"x_{e['id']}"): 
+                        supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
 
 elif st.session_state.page == "📦 Lager":
     if st.button("⬅️ MENÜ"): st.session_state.page = "🏠 Home"; st.rerun()
-    materials = supabase.table("materials").select("*").execute().data
-    t1, t2 = st.tabs(["📥 Inventur", "📤 Verbrauch"])
-    with t1:
-        with st.form("inv"):
-            sel = st.selectbox("Material", [i['name'] for i in materials])
-            q = st.number_input("Aktueller Bestand", step=1.0)
-            if st.form_submit_button("Bestand setzen"):
-                mid = next(i for i in materials if i['name'] == sel)['id']
-                supabase.table("materials").update({"stock_quantity": q}).eq("id", mid).execute(); st.rerun()
-    with t2:
-        if not is_archived:
-            with st.form("cons"):
-                sel = st.selectbox("Was wurde genutzt?", [i['name'] for i in materials])
-                q = st.number_input("Menge", step=1.0)
-                if st.form_submit_button("Buchen"):
-                    m = next(i for i in materials if i['name'] == sel)
-                    supabase.table("notes").insert({"content":f"{q}x {sel}", "category":"Material", "project_name":curr_p, "cost_amount":m['price_per_unit']*q, "is_completed":False}).execute()
-                    supabase.table("materials").update({"stock_quantity": float(m['stock_quantity'])-q}).eq("id", m['id']).execute(); st.rerun()
-    for m in materials:
-        st.write(f"📦 {m['name']}: **{m['stock_quantity']}**")
+    mat_res = supabase.table("materials").select("*").execute()
+    materials = mat_res.data if mat_res.data else []
+    
+    if not materials:
+        st.warning("Keine Materialien im Lager gefunden.")
+    else:
+        t1, t2 = st.tabs(["📥 Inventur", "📤 Verbrauch"])
+        with t1:
+            with st.form("inv"):
+                names = [i['name'] for i in materials]
+                sel = st.selectbox("Material", names)
+                q = st.number_input("Aktueller Bestand", step=1.0)
+                if st.form_submit_button("Bestand setzen"):
+                    mid = next(i for i in materials if i['name'] == sel)['id']
+                    supabase.table("materials").update({"stock_quantity": q}).eq("id", mid).execute(); st.rerun()
+        with t2:
+            if not is_archived:
+                with st.form("cons"):
+                    names = [i['name'] for i in materials]
+                    sel = st.selectbox("Was wurde genutzt?", names)
+                    q = st.number_input("Menge", step=1.0)
+                    if st.form_submit_button("Buchen"):
+                        m = next(i for i in materials if i['name'] == sel)
+                        supabase.table("notes").insert({"content":f"{q}x {sel}", "category":"Material", "project_name":curr_p, "cost_amount":m['price_per_unit']*q, "is_completed":False}).execute()
+                        supabase.table("materials").update({"stock_quantity": float(m['stock_quantity'])-q}).eq("id", m['id']).execute(); st.rerun()
+        
+        st.write("### Aktuelle Bestände")
+        for m in materials:
+            st.write(f"📦 {m['name']}: **{m['stock_quantity']}**")
