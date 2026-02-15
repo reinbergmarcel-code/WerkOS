@@ -45,12 +45,10 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
 
-    /* Button-Farben */
     div.stButton > button[key^="d_"] { background-color: #2ecc71 !important; color: white !important; height: 3rem !important; }
     div.stButton > button[key^="e_"] { background-color: #f1c40f !important; color: black !important; height: 3rem !important; }
     div.stButton > button[key^="x_"] { background-color: #e74c3c !important; color: white !important; height: 3rem !important; }
     
-    /* Rückweg-Button Styling */
     div.stButton > button[key="back_to_menu"] { 
         background-color: #1e3a8a !important; 
         color: white !important; 
@@ -79,7 +77,7 @@ if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 # --- HEADER ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1><p>Digitales Baustellenmanagement</p></div>""", unsafe_allow_html=True)
 
-# --- NEUER RÜCKWEG-BUTTON (Nur wenn nicht auf Home) ---
+# --- RÜCKWEG-BUTTON ---
 if st.session_state.page != "🏠 Home":
     if st.button("⬅️ ZURÜCK ZUM MENÜ", key="back_to_menu", use_container_width=True):
         st.session_state.page = "🏠 Home"
@@ -102,7 +100,7 @@ with c_top2:
 
 st.divider()
 
-# --- SEITEN LOGIK (EXAKT WIE IN v2.6) ---
+# --- SEITEN LOGIK ---
 if st.session_state.page == "🏠 Home":
     col1, col2 = st.columns(2)
     with col1:
@@ -121,7 +119,7 @@ elif st.session_state.page == "📊 Dashboard":
         st.bar_chart(df.groupby('category')['cost_amount'].sum())
 
 elif st.session_state.page == "📋 Board":
-    with st.expander("➕ NEUER EINTRAG / FOTO"):
+    with st.expander("➕ NEUER EINTRAG / FOTO / AUDIO"):
         with st.form("new_e"):
             t = st.text_input("Titel")
             k = st.selectbox("Kat", ["Aufgabe", "Notiz", "Wichtig"])
@@ -129,12 +127,24 @@ elif st.session_state.page == "📋 Board":
             if st.form_submit_button("SPEICHERN"):
                 supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
                 st.rerun()
+        
+        # FOTO-FUNKTION
         img = st.camera_input("Kamera")
         if img:
             fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
             supabase.storage.from_("werkos_fotos").upload(fn, img.getvalue())
             url = supabase.storage.from_("werkos_fotos").get_public_url(fn)
             supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
+            st.rerun()
+
+        # AUDIO-FUNKTION (REINSTALLLIERT)
+        st.write("🎤 Sprachnotiz:")
+        audio_bytes = audio_recorder(text="", icon_size="2x")
+        if audio_bytes:
+            afn = f"audio_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
+            supabase.storage.from_("werkos_fotos").upload(afn, audio_bytes)
+            a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
+            supabase.table("notes").insert({"content": "Sprachnotiz", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
             st.rerun()
 
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
@@ -150,6 +160,7 @@ elif st.session_state.page == "📋 Board":
         else:
             st.markdown(f"""<div class="card"><strong>{e['category']}</strong><br>{e['content']}<br><small>{e.get('cost_amount',0)} €</small></div>""", unsafe_allow_html=True)
             if e.get("image_url"): st.image(e["image_url"])
+            if e.get("audio_url"): st.audio(e["audio_url"])
             c1, c2, c3 = st.columns(3)
             if c1.button("✅", key=f"d_{e['id']}"):
                 supabase.table("notes").update({"is_completed":True}).eq("id", e['id']).execute()
@@ -162,6 +173,7 @@ elif st.session_state.page == "📋 Board":
                 st.rerun()
 
 elif st.session_state.page == "📦 Lager":
+    # ... Rest des Codes bleibt identisch wie in v2.6/v2.14 ...
     st.markdown("### 📦 Lager")
     with st.expander("➕ NEUES MATERIAL ANLEGEN"):
         with st.form("m_add"):
