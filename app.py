@@ -39,6 +39,12 @@ st.markdown("""
     header {visibility: hidden;}
     footer {visibility: hidden;}
 
+    /* ERZWINGE SICHTBARKEIT FÜR AUDIO RECORDER AM DESKTOP */
+    iframe[title="audio_recorder_streamlit.audio_recorder"] {
+        min-height: 100px !important;
+        display: block !important;
+    }
+
     div.stButton > button[key^="d_"] { background-color: #2ecc71 !important; color: white !important; height: 3rem !important; }
     div.stButton > button[key^="e_"] { background-color: #f1c40f !important; color: black !important; height: 3rem !important; }
     div.stButton > button[key^="x_"] { background-color: #e74c3c !important; color: white !important; height: 3rem !important; }
@@ -67,7 +73,7 @@ else:
 if 'page' not in st.session_state: st.session_state.page = "🏠 Home"
 if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 
-# --- HEADER & BACK BUTTON ---
+# --- HEADER ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1><p>Digitales Baustellenmanagement</p></div>""", unsafe_allow_html=True)
 
 if st.session_state.page != "🏠 Home":
@@ -125,28 +131,28 @@ elif st.session_state.page == "📋 Board":
             supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
             st.rerun()
 
-        # AUDIO (FORCED DISPLAY)
+        # AUDIO MIT EIGENEM CONTAINER FÜR DESKTOP SICHTBARKEIT
         st.markdown("---")
-        st.write("🎤 Sprachnotiz (Desktop-Fix):")
-        # Wir platzieren den Recorder außerhalb jeglicher Spalten oder Forms
-        audio_data = audio_recorder(
-            text="Aufnahme starten",
-            recording_color="#e74c3c",
-            neutral_color="#1e3a8a",
-            icon_size="3x",
-            key="desktop_mic_final"
-        )
+        st.write("🎤 Sprachnotiz aufnehmen:")
+        audio_container = st.container()
+        with audio_container:
+            audio_data = audio_recorder(
+                text="Tippen zum Aufnehmen",
+                recording_color="#e74c3c",
+                neutral_color="#1e3a8a",
+                icon_size="3x",
+                key="audio_recorder_v20"
+            )
         
         if audio_data:
             st.audio(audio_data)
-            if st.button("💾 AUDIO SPEICHERN"):
+            if st.button("💾 AUDIO-MEMO SPEICHERN"):
                 afn = f"rec_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
                 supabase.storage.from_("werkos_fotos").upload(afn, audio_data)
                 a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
                 supabase.table("notes").insert({"content": "Audio-Memo", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
                 st.rerun()
 
-    # --- BOARD LISTE ---
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
         if st.session_state.edit_id == e['id']:
@@ -170,6 +176,7 @@ elif st.session_state.page == "📋 Board":
             if c3.button("🗑️", key=f"x_{e['id']}"):
                 supabase.table("notes").delete().eq("id", e['id']).execute(); st.rerun()
 
+# --- LAGER & ZEITEN BLEIBEN UNBERÜHRT ---
 elif st.session_state.page == "📦 Lager":
     st.markdown("### 📦 Lager")
     with st.expander("➕ NEUES MATERIAL ANLEGEN"):
