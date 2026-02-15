@@ -22,7 +22,7 @@ st.markdown("""
         margin-bottom: 15px;
     }
     
-    /* Zwingt Spalten nebeneinander, egal wie schmal das Handy ist */
+    /* Zwingt Spalten nebeneinander */
     [data-testid="column"] {
         flex: 1 1 0% !important;
         min-width: 0px !important;
@@ -41,7 +41,6 @@ st.markdown("""
         border-radius: 12px !important;
         font-weight: 600 !important;
         width: 100% !important;
-        padding: 0.5rem 0px !important;
     }
 
     header {visibility: hidden;}
@@ -72,7 +71,7 @@ if 'edit_id' not in st.session_state: st.session_state.edit_id = None
 # --- HEADER ---
 st.markdown("""<div class="app-header"><h1>🏗️ WerkOS Pro</h1></div>""", unsafe_allow_html=True)
 
-# --- NAVIGATION (ROBUSTE REIHE) ---
+# --- NAVIGATION ---
 nav = st.columns(5)
 with nav[0]: 
     if st.button("🏠", key="n1"): st.session_state.page = "🏠 Home"; st.rerun()
@@ -128,4 +127,15 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
                 st.rerun()
     
-    res = supabase.table("notes").select("*").
+    res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
+    for e in res.data:
+        if st.session_state.edit_id == e['id']:
+            with st.form(f"ed_{e['id']}"):
+                nt = st.text_input("Inhalt", value=e['content'])
+                nc = st.number_input("Kosten", value=float(e.get('cost_amount', 0)))
+                if st.form_submit_button("Speichern"):
+                    supabase.table("notes").update({"content": nt, "cost_amount": nc}).eq("id", e['id']).execute()
+                    st.session_state.edit_id = None
+                    st.rerun()
+        else:
+            st.markdown(f"""<div
