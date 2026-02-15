@@ -117,7 +117,6 @@ elif st.session_state.page == "📋 Board":
                 supabase.table("notes").insert({"content":t, "category":k, "project_name":curr_p, "cost_amount":c, "is_completed":False}).execute()
                 st.rerun()
         
-        # FOTO
         img = st.camera_input("Kamera")
         if img:
             fn = f"{datetime.datetime.now().strftime('%H%M%S')}.jpg"
@@ -126,18 +125,28 @@ elif st.session_state.page == "📋 Board":
             supabase.table("notes").insert({"content":"Foto", "category":"Notiz", "project_name":curr_p, "image_url":url, "is_completed":False}).execute()
             st.rerun()
 
-        # AUDIO (VEREINFACHT FÜR CHROME DESKTOP)
-        st.write("🎤 Sprachnotiz:")
-        audio_data = audio_recorder(text="Aufnahme", icon_size="2x", key="audio_final")
+        # AUDIO (FORCED DISPLAY)
+        st.markdown("---")
+        st.write("🎤 Sprachnotiz (Desktop-Fix):")
+        # Wir platzieren den Recorder außerhalb jeglicher Spalten oder Forms
+        audio_data = audio_recorder(
+            text="Aufnahme starten",
+            recording_color="#e74c3c",
+            neutral_color="#1e3a8a",
+            icon_size="3x",
+            key="desktop_mic_final"
+        )
+        
         if audio_data:
             st.audio(audio_data)
-            if st.button("💾 SPEICHERN"):
+            if st.button("💾 AUDIO SPEICHERN"):
                 afn = f"rec_{datetime.datetime.now().strftime('%H%M%S')}.mp3"
                 supabase.storage.from_("werkos_fotos").upload(afn, audio_data)
                 a_url = supabase.storage.from_("werkos_fotos").get_public_url(afn)
                 supabase.table("notes").insert({"content": "Audio-Memo", "category": "Notiz", "project_name": curr_p, "audio_url": a_url, "is_completed": False}).execute()
                 st.rerun()
 
+    # --- BOARD LISTE ---
     res = supabase.table("notes").select("*").eq("is_completed", False).eq("project_name", curr_p).order("created_at", desc=True).execute()
     for e in res.data:
         if st.session_state.edit_id == e['id']:
