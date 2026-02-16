@@ -1,4 +1,0 @@
-streamlit
-supabase
-fpdf2
-audio-recorder-streamlit
