@@ -123,7 +123,7 @@ elif st.session_state.page == "📋 Board":
         selected_proj_id = proj_dict[selected_proj_name]
 
         # 2. Das Formular (Alles darin MUSS eingerückt sein)
-        with st.form("new_note_entry", clear_on_submit=True):
+            with st.form("board_form_v222", clear_on_submit=True):
             st.subheader("Neuer Eintrag")
             
             # Textbereich (nutzt dein v2.22 Transcript falls vorhanden)
