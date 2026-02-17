@@ -4,203 +4,134 @@ from supabase import create_client
 import pandas as pd
 import uuid
 
-# 1. DATENBANK VERBINDUNG (Direkt via Secrets)
+# 1. DATENBANK VERBINDUNG (Original v2.22)
 try:
     supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
 except Exception as e:
     st.error(f"Verbindung zu Supabase fehlgeschlagen: {e}")
     st.stop()
 
-# 2. SEITEN-SETUP
+# 2. SEITEN-SETUP (Original v2.22)
 st.set_page_config(page_title="WerkOS Pro", layout="wide")
 
 if 'page' not in st.session_state: 
     st.session_state.page = "🏠 Home"
 
-# 3. SIDEBAR NAVIGATION (Ohne Login-Zwang)
+# 3. SIDEBAR (Exklusiv WerkOS)
 with st.sidebar:
-    st.title("8Count Athletics / WerkOS")
+    st.title("WerkOS Pro")
     st.divider()
     if st.button("🏠 Home", use_container_width=True): st.session_state.page = "🏠 Home"
     if st.button("🏗️ Projekte", use_container_width=True): st.session_state.page = "🏗️ Projekte"
-    if st.button("📋 Board / Doku", use_container_width=True): st.session_state.page = "📋 Board"
+    if st.button("📋 Board", use_container_width=True): st.session_state.page = "📋 Board"
     if st.button("⏱️ Erfassung", use_container_width=True): st.session_state.page = "⏱️ Erfassung"
     if st.button("📊 Stats", use_container_width=True): st.session_state.page = "📊 Stats"
     st.divider()
-    st.caption("v2.22 Reference Standard (Restored)")
+    st.caption("WerkOS v2.22 - Autarkes System")
 
 # --- SEITE: HOME ---
 if st.session_state.page == "🏠 Home":
-    st.header("🏠 Willkommen bei WerkOS Pro")
-    st.write("Wähle eine Funktion in der Sidebar aus.")
+    st.header("🏠 Home")
+    st.write("Willkommen zurück im WerkOS System.")
 
-# --- SEITE: PROJEKTE ---
+# --- SEITE: PROJEKTE (Hinzugefügt) ---
 elif st.session_state.page == "🏗️ Projekte":
-    st.header("🏗️ Projekt-Verwaltung")
-    with st.expander("➕ Neue Baustelle anlegen", expanded=True):
-        with st.form("new_project_form", clear_on_submit=True):
-            p_name = st.text_input("Projekt Name")
-            p_client = st.text_input("Kunde")
-            p_address = st.text_input("Adresse")
-            if st.form_submit_button("Projekt anlegen"):
-                if p_name:
-                    supabase.table("projects").insert({
-                        "project_name": p_name, 
-                        "client_name": p_client, 
-                        "address": p_address
-                    }).execute()
-                    st.success(f"Projekt '{p_name}' erstellt!")
-                    st.rerun()
-
+    st.header("🏗️ Baustellen anlegen")
+    with st.form("new_proj"):
+        p_name = st.text_input("Projektname")
+        p_client = st.text_input("Kunde")
+        if st.form_submit_button("Speichern"):
+            if p_name:
+                supabase.table("projects").insert({"project_name": p_name, "client_name": p_client}).execute()
+                st.rerun()
+    
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
-    projs = res.data if res.data else []
-    for p in projs:
-        with st.container(border=True):
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.subheader(p['project_name'])
-                st.write(f"📍 {p['address']} | Kunde: {p['client_name']}")
-            with col2:
-                if st.button("🗑️", key=f"del_p_{p['id']}"):
-                    supabase.table("projects").delete().eq("id", p['id']).execute()
-                    st.rerun()
+    for p in (res.data if res.data else []):
+        st.info(f"Projekt: {p['project_name']} (Kunde: {p['client_name']})")
 
-# --- SEITE: BOARD (Inkl. AUDIO & FOTO) ---
-# --- SEITE: BOARD / DOKU (Optimiert) ---
-elif st.session_state.page == "📋 Board / Doku":
-    st.header("📋 Baustellen-Dokumentation")
+# --- SEITE: BOARD (RESTAURIERT & ERGÄNZT) ---
+elif st.session_state.page == "📋 Board":
+    st.header("📋 Dokumentation")
     
-    # 1. Schnelle Erfassung (Tabs für die Eingabemethode)
-    tab1, tab2, tab3 = st.tabs(["✍️ Text-Notiz", "🎤 Sprachnotiz", "📸 Foto"])
-    
-    with tab1:
-        with st.form("text_note_form", clear_on_submit=True):
-            t_content = st.text_area("Was gibt es zu berichten?")
-            res_p = supabase.table("projects").select("project_name").execute()
-            p_list = [p['project_name'] for p in res_p.data] if res_p.data else ["Allgemein"]
-            t_project = st.selectbox("Projekt wählen", options=p_list, key="t_proj")
-            if st.form_submit_button("Notiz speichern"):
-                if t_content:
-                    supabase.table("notes").insert({
-                        "content": t_content, "project_name": t_project, "category": "Notiz"
-                    }).execute()
-                    st.success("Notiz gespeichert!")
-                    st.rerun()
-
-    with tab2:
-        st.write("Drücke auf das Mikrofon, um die Aufnahme zu starten:")
-        audio_bytes = audio_recorder(text="Aufnahme", icon_size="2x", key="board_mic")
-        if audio_bytes:
-            st.audio(audio_bytes, format="audio/wav")
-            res_p = supabase.table("projects").select("project_name").execute()
-            p_list = [p['project_name'] for p in res_p.data] if res_p.data else ["Allgemein"]
-            a_project = st.selectbox("Projekt für Audio wählen", options=p_list, key="a_proj")
-            if st.button("🎤 Sprachnotiz hochladen"):
-                file_name = f"audio_{uuid.uuid4()}.wav"
-                supabase.storage.from_("werkos_media").upload(file_name, audio_bytes)
-                audio_url = supabase.storage.from_("werkos_media").get_public_url(file_name)
-                supabase.table("notes").insert({
-                    "content": "Sprachnachricht", "image_url": audio_url, 
-                    "project_name": a_project, "category": "Audio"
-                }).execute()
-                st.success("Sprachnotiz gespeichert!")
-                st.rerun()
-
-    with tab3:
-        img_file = st.camera_input("Baustellenfoto machen")
-        if img_file:
-            with st.form("photo_form"):
-                p_list_photo = [p['project_name'] for p in (supabase.table("projects").select("project_name").execute()).data] if p_list else ["Allgemein"]
-                f_project = st.selectbox("Projekt für Foto", options=p_list_photo)
-                f_desc = st.text_input("Kurze Beschreibung zum Foto")
-                if st.form_submit_button("Foto hochladen"):
-                    f_name = f"{uuid.uuid4()}.jpg"
-                    supabase.storage.from_("werkos_media").upload(f_name, img_file.getvalue())
-                    file_url = supabase.storage.from_("werkos_media").get_public_url(f_name)
-                    supabase.table("notes").insert({
-                        "content": f_desc if f_desc else "Foto-Dokumentation", 
-                        "project_name": f_project, "image_url": file_url, "category": "Foto"
-                    }).execute()
-                    st.success("Foto gespeichert!")
-                    st.rerun()
+    # Hier ist deine Audio-Funktion wieder fest drin
+    st.subheader("🎤 Audio-Notiz")
+    audio_data = audio_recorder(text="Aufnahme starten", icon_size="2x")
+    if audio_data:
+        st.audio(audio_data)
+        if st.button("Audio hochladen"):
+            f_name = f"audio_{uuid.uuid4()}.wav"
+            supabase.storage.from_("werkos_media").upload(f_name, audio_data)
+            url = supabase.storage.from_("werkos_media").get_public_url(f_name)
+            supabase.table("notes").insert({"content": "Sprachnotiz", "image_url": url, "category": "Audio"}).execute()
+            st.rerun()
 
     st.divider()
-
-    # 2. Anzeige der Einträge (Filterbar)
-    res_n = supabase.table("notes").select("*").order("created_at", desc=True).execute()
-    notes_data = res_n.data if res_n.data else []
     
-    if not notes_data:
-        st.info("Noch keine Einträge im Board vorhanden.")
-    else:
-        for n in notes_data:
-            # Farben für die Badges festlegen
-            cat = n.get('category', 'Notiz')
-            color = "blue"
-            if cat == "Audio": color = "red"
-            elif cat == "Material": color = "green"
-            elif cat == "Foto": color = "orange"
-            
-            with st.container(border=True):
-                col_meta, col_del = st.columns([5, 1])
-                with col_meta:
-                    st.markdown(f"**:{color}[{cat}]** | 🏗️ {n.get('project_name', 'Allgemein')} | 📅 {n['created_at'][:10]}")
-                with col_del:
-                    if st.button("🗑️", key=f"del_{n['id']}"):
-                        supabase.table("notes").delete().eq("id", n['id']).execute()
-                        st.rerun()
-                
-                st.write(n['content'])
-                
-                # Medium anzeigen (Audio oder Bild)
-                if n.get('image_url'):
-                    if ".wav" in n['image_url']:
-                        st.audio(n['image_url'])
-                    else:
-                        st.image(n['image_url'], width=400)
+    # Neue Funktion: Manuelle Textnotiz & Foto
+    st.subheader("✍️ Text / 📸 Foto")
+    with st.form("board_entry"):
+        text_input = st.text_area("Manuelle Notiz eintippen")
+        img_input = st.camera_input("Foto hinzufügen")
+        res_p = supabase.table("projects").select("project_name").execute()
+        p_list = [p['project_name'] for p in res_p.data] if res_p.data else ["Allgemein"]
+        selected_p = st.selectbox("Projekt zuordnen", p_list)
+        
+        if st.form_submit_button("Eintrag speichern"):
+            f_url = None
+            if img_input:
+                f_name = f"{uuid.uuid4()}.jpg"
+                supabase.storage.from_("werkos_media").upload(f_name, img_input.getvalue())
+                f_url = supabase.storage.from_("werkos_media").get_public_url(f_name)
+            supabase.table("notes").insert({
+                "content": text_input if text_input else "Foto-Doku",
+                "project_name": selected_p,
+                "image_url": f_url,
+                "category": "Notiz" if text_input else "Foto"
+            }).execute()
+            st.rerun()
+
+    st.divider()
+    # Anzeige-Logik (Original v2.22 Style)
+    res_n = supabase.table("notes").select("*").order("created_at", desc=True).execute()
+    for n in (res_n.data if res_n.data else []):
+        with st.container(border=True):
+            st.write(f"**{n.get('project_name', 'Allgemein')}** | {n['created_at'][:10]}")
+            st.write(n['content'])
+            if n.get('image_url'):
+                if ".wav" in n['image_url']: st.audio(n['image_url'])
+                else: st.image(n['image_url'], width=300)
 
 # --- SEITE: ERFASSUNG ---
 elif st.session_state.page == "⏱️ Erfassung":
-    st.header("⏱️ Zeit & Material")
+    st.header("⏱️ Erfassung")
     res_p = supabase.table("projects").select("id, project_name").execute()
-    projs = res_p.data if res_p.data else []
+    p_map = {p['project_name']: p['id'] for p in res_p.data} if res_p.data else {}
     
-    if not projs:
-        st.warning("Bitte erst ein Projekt anlegen.")
-    else:
-        p_options = {p['project_name']: p['id'] for p in projs}
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("🕒 Zeit")
-            with st.form("time_f"):
-                p_sel = st.selectbox("Projekt", options=list(p_options.keys()))
-                worker = st.text_input("Mitarbeiter")
-                hrs = st.number_input("Stunden", min_value=0.0, step=0.5)
-                if st.form_submit_button("Buchen"):
-                    supabase.table("work_hours").insert({
-                        "project_id": p_options[p_sel], "worker_name": worker, "hours": hrs
-                    }).execute()
-                    st.success("Zeit gebucht!")
-        with col2:
-            st.subheader("🧱 Material")
-            with st.form("mat_f"):
-                p_sel_m = st.selectbox("Projekt", options=list(p_options.keys()))
-                item = st.text_input("Material")
-                cost = st.number_input("Kosten (€)", min_value=0.0)
-                if st.form_submit_button("Erfassen"):
-                    supabase.table("notes").insert({
-                        "content": f"Material: {item}", "project_name": p_sel_m,
-                        "cost_amount": cost, "category": "Material"
-                    }).execute()
-                    st.success("Material erfasst!")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Stunden")
+        with st.form("h_form"):
+            p_sel = st.selectbox("Projekt", list(p_map.keys()))
+            worker = st.text_input("Wer?")
+            h_val = st.number_input("Stunden", step=0.5)
+            if st.form_submit_button("Zeit buchen"):
+                supabase.table("work_hours").insert({"project_id": p_map[p_sel], "worker_name": worker, "hours": h_val}).execute()
+                st.success("Zeit gebucht")
+    with col2:
+        st.subheader("Material")
+        with st.form("m_form"):
+            p_sel_m = st.selectbox("Projekt", list(p_map.keys()), key="m_p")
+            item = st.text_input("Was?")
+            price = st.number_input("Kosten (€)")
+            if st.form_submit_button("Material speichern"):
+                supabase.table("notes").insert({"content": f"Material: {item}", "project_name": p_sel_m, "cost_amount": price, "category": "Material"}).execute()
+                st.success("Material gebucht")
 
 # --- SEITE: STATS ---
 elif st.session_state.page == "📊 Stats":
-    st.header("📊 Auswertung")
-    res_n = supabase.table("notes").select("cost_amount").execute()
-    if res_n.data:
-        df = pd.DataFrame(res_n.data)
-        st.metric("Materialkosten Gesamt", f"{df['cost_amount'].sum():,.2f} €")
-    else:
-        st.write("Keine Kostendaten vorhanden.")
+    st.header("📊 Statistik")
+    res = supabase.table("notes").select("cost_amount").execute()
+    if res.data:
+        df = pd.DataFrame(res.data)
+        st.metric("Gesamt Materialkosten", f"{df['cost_amount'].sum():,.2f} €")
