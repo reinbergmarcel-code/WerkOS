@@ -112,7 +112,7 @@ elif st.session_state.page == "🏗️ Projekte":
 elif st.session_state.page == "📋 Board":
     st.header("📋 Projekt-Board")
 
-    # 1. Projekte für die Auswahl laden
+    # 1. Projekte laden
     proj_response = supabase.table("projects").select("id, project_name").execute()
     projects = proj_response.data
 
@@ -121,57 +121,67 @@ elif st.session_state.page == "📋 Board":
         selected_proj_name = st.selectbox("Wähle ein Projekt aus:", list(proj_names.keys()))
         selected_proj_id = proj_names[selected_proj_name]
 
-        # --- AUDIO TEIL (v2.22 Standard) ---
-        st.subheader("Sprachnotiz")
-        audio_file = st.audio_input("Notiz einsprechen")
+        # --- AUDIO & FOTO SEKTION ---
+        col1, col2 = st.columns(2)
         
-        # Initialisiere Transcript im Session State, damit es beim Formular-Rerun nicht verschwindet
+        with col1:
+            st.subheader("🎤 Sprache")
+            audio_file = st.audio_input("Notiz einsprechen", key="board_audio")
+        
+        with col2:
+            st.subheader("📸 Foto")
+            # Kamera-Funktion für das Smartphone oder Datei-Upload am PC
+            photo_file = st.camera_input("Foto aufnehmen") if st.checkbox("Kamera nutzen") else st.file_uploader("Bild hochladen", type=['jpg', 'png', 'jpeg'])
+
+        # --- TRANSKRIPTION LOGIK ---
         if 'transcript' not in st.session_state:
             st.session_state.transcript = ""
 
-        if audio_file:
-            st.audio(audio_file)
-            if st.button("Transkribieren"):
-                with st.spinner("Verarbeite Audio..."):
-                    # Hier wird deine spezifische Transkriptions-Logik aufgerufen
-                    # Beispiel: st.session_state.transcript = transcribe_audio(audio_file)
-                    st.session_state.transcript = "Hier erscheint der Text deiner Aufnahme..." # Platzhalter
-                    st.success("Audio erfolgreich umgewandelt!")
+        if audio_file and st.button("Audio umwandeln"):
+            with st.spinner("Transkribiere..."):
+                # Hier bleibt deine v2.22 Logik für das Transkribieren
+                st.session_state.transcript = "Transkribierter Text erscheint hier..." 
 
-        # --- NOTIZ FORMULAR ---
-        with st.form("new_note", clear_on_submit=True):
-            # Nutzt das Transcript als Standardwert
-            note_text = st.text_area("Notiz Text", value=st.session_state.transcript)
+        # --- SPEICHER FORMULAR ---
+        with st.form("new_note_entry", clear_on_submit=True):
+            note_text = st.text_area("Bericht / Details", value=st.session_state.transcript)
             
-            if st.form_submit_button("Notiz speichern"):
-                if note_text:
+            if st.form_submit_button("Eintrag speichern"):
+                if note_text or photo_file:
                     try:
-                        # Speichern in die 'notes' Tabelle (RLS Fix aktiv)
+                        # 1. Foto in Storage hochladen (falls vorhanden)
+                        photo_url = None
+                        if photo_file:
+                            file_path = f"{st.session_state.user.id}/{selected_proj_id}_{photo_file.name}"
+                            supabase.storage.from_("project_files").upload(file_path, photo_file.getvalue())
+                            photo_url = supabase.storage.from_("project_files").get_public_url(file_path)
+
+                        # 2. Daten in 'notes' speichern
                         supabase.table("notes").insert({
                             "project_id": selected_proj_id,
                             "content": note_text,
+                            "image_url": photo_url,
                             "user_id": st.session_state.user.id
                         }).execute()
                         
-                        st.session_state.transcript = "" # Reset nach Erfolg
-                        st.success("Notiz im Board gespeichert!")
+                        st.session_state.transcript = ""
+                        st.success("Alles gespeichert!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Datenbank-Fehler im Board: {e}")
-                else:
-                    st.warning("Kein Inhalt zum Speichern vorhanden.")
+                        st.error(f"Fehler beim Speichern: {e}")
         
-        # --- HISTORIE ---
+        # --- HISTORIE ANZEIGEN ---
         st.divider()
-        st.subheader(f"Letzte Berichte: {selected_proj_name}")
         notes_res = supabase.table("notes").select("*").eq("project_id", selected_proj_id).order("created_at", desc=True).execute()
         
         for n in notes_res.data:
             with st.expander(f"Eintrag vom {n['created_at'][:10]}"):
+                if n.get('image_url'):
+                    st.image(n['image_url'], width=300)
                 st.write(n['content'])
 
     else:
-        st.info("Bitte lege unter '🏗️ Projekte' erst eine Baustelle an.")
+        st.info("Bitte lege zuerst ein Projekt an.")
 
     st.divider()
     
