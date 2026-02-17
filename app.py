@@ -82,25 +82,26 @@ if st.session_state.page == "🏠 Home":
 elif st.session_state.page == "🏗️ Projekte":
     st.header("🏗️ Baustellen anlegen")
     
-    with st.form("new_proj", clear_on_submit=True):
+    with st.form("new_proj"):
         p_name = st.text_input("Projektname")
         p_client = st.text_input("Kunde")
         
         if st.form_submit_button("Speichern"):
             if p_name:
                 try:
-                    # Wir senden die Daten. 
-                    # Durch 'USING (true)' im SQL oben MUSS die DB das jetzt annehmen.
+                    # Minimaler Insert ohne RLS-Hürden
                     supabase.table("projects").insert({
                         "project_name": p_name, 
                         "client_name": p_client,
                         "user_id": st.session_state.user.id
                     }).execute()
                     
-                    st.success(f"Baustelle '{p_name}' wurde angelegt!")
+                    st.success("Projekt erfolgreich gespeichert!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Sogar mit Notregel Fehler: {e}")
+                    st.error(f"Kritischer Fehler: {e}")
+            else:
+                st.warning("Bitte Projektnamen angeben.")
     
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
