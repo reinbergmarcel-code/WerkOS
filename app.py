@@ -126,21 +126,21 @@ elif st.session_state.page == "📋 Board":
     
     # Neue Funktion: Manuelle Textnotiz & Foto
     st.subheader("✍️ Text / 📸 Foto")
-with st.form("board_entry"):
-    text_input = st.text_area("Manuelle Notiz eintippen")
-    img_input = st.camera_input("Foto hinzufügen")
-    res_p = supabase.table("projects").select("project_name").execute()
-    p_list = [p['project_name'] for p in res_p.data] if res_p.data else ["Allgemein"]
-    selected_p = st.selectbox("Projekt zuordnen", p_list)
-    
-    if st.form_submit_button("Eintrag speichern"):
+    with st.form("board_entry"):
+        text_input = st.text_area("Manuelle Notiz eintippen")
+        img_input = st.camera_input("Foto hinzufügen")
+        res_p = supabase.table("projects").select("project_name").execute()
+        p_list = [p['project_name'] for p in res_p.data] if res_p.data else ["Allgemein"]
+        selected_p = st.selectbox("Projekt zuordnen", p_list)
+        
+        if st.form_submit_button("Eintrag speichern"):
             f_url = None
             if img_input:
                 f_name = f"{uuid.uuid4()}.jpg"
                 supabase.storage.from_("werkos_media").upload(f_name, img_input.getvalue())
                 f_url = supabase.storage.from_("werkos_media").get_public_url(f_name)
             
-            # Wichtig: Hier müssen alle drei Klammern am Ende stehen: }))
+            # WICHTIG: Prüfe die Klammern hier am Ende:
             supabase.table("notes").insert(add_user({
                 "content": text_input if text_input else "Foto-Doku",
                 "project_name": selected_p,
@@ -148,8 +148,9 @@ with st.form("board_entry"):
                 "category": "Notiz" if text_input else "Foto"
             })).execute()
             st.rerun()
+
     st.divider()
-    # Anzeige-Logik (Original v2.22 Style)
+    # Hier muss die Anzeige-Logik der Notizen korrekt eingerückt sein
     res_n = supabase.table("notes").select("*").order("created_at", desc=True).execute()
     for n in (res_n.data if res_n.data else []):
         with st.container(border=True):
@@ -159,7 +160,7 @@ with st.form("board_entry"):
                 if ".wav" in n['image_url']: st.audio(n['image_url'])
                 else: st.image(n['image_url'], width=300)
 
-# --- SEITE: ERFASSUNG ---
+# --- ZEILE 163: Das elif muss GANZ LINKS stehen (gleiche Ebene wie das if davor) ---
 elif st.session_state.page == "⏱️ Erfassung":
     st.header("⏱️ Erfassung")
     res_p = supabase.table("projects").select("id, project_name").execute()
