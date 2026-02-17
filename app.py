@@ -19,15 +19,59 @@ if 'page' not in st.session_state:
 # Sidebar Navigation
 with st.sidebar:
     st.title("WerkOS Pro")
-    if st.button("🏠 Home", use_container_width=True): st.session_state.page = "🏠 Home"
-    if st.button("📋 Board", use_container_width=True): st.session_state.page = "📋 Board"
-    if st.button("📦 Lager", use_container_width=True): st.session_state.page = "📦 Lager"
+    if st.button("🏠 Dashboard", use_container_width=True): st.session_state.page = "🏠 Home"
+    if st.button("🏗️ Projekte", use_container_width=True): st.session_state.page = "🏗️ Projekte"
+    if st.button("📋 Board / Doku", use_container_width=True): st.session_state.page = "📋 Board"
+    if st.button("⏱️ Erfassung", use_container_width=True): st.session_state.page = "⏱️ Erfassung"
     if st.button("📊 Stats", use_container_width=True): st.session_state.page = "📊 Stats"
-
+    
+    st.divider()
+    st.caption("WerkOS v2.52 Beta")
 # --- SEITE: HOME ---
 if st.session_state.page == "🏠 Home":
     st.header("Willkommen bei WerkOS Pro")
     st.write("Wähle ein Modul in der Sidebar aus.")
+    # --- SEITE: PROJEKTE ---
+elif st.session_state.page == "🏗️ Projekte":
+    st.header("🏗️ Projekt-Verwaltung")
+    
+    # Formular zum Anlegen
+    with st.expander("➕ Neue Baustelle anlegen", expanded=True):
+        with st.form("new_project_form", clear_on_submit=True):
+            p_name = st.text_input("Projekt Name (z.B. Neubau Meyer)")
+            p_client = st.text_input("Kunde / Auftraggeber")
+            p_address = st.text_input("Straße / Ort")
+            if st.form_submit_button("Projekt anlegen"):
+                if p_name:
+                    supabase.table("projects").insert({
+                        "project_name": p_name, 
+                        "client_name": p_client, 
+                        "address": p_address
+                    }).execute()
+                    st.success(f"Projekt '{p_name}' wurde erstellt!")
+                    st.rerun()
+                else:
+                    st.error("Bitte einen Projektnamen angeben.")
+
+    st.divider()
+    
+    # Liste der Baustellen
+    res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
+    projs = res.data if res.data else []
+    
+    if projs:
+        for p in projs:
+            with st.container(border=True):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.subheader(f"🏗️ {p['project_name']}")
+                    st.write(f"👤 Kunde: {p['client_name']} | 📍 {p['address']}")
+                with col2:
+                    if st.button("Löschen", key=f"del_p_{p['id']}"):
+                        supabase.table("projects").delete().eq("id", p['id']).execute()
+                        st.rerun()
+    else:
+        st.info("Noch keine Projekte angelegt.")
 
 # --- SEITE: BOARD ---
 elif st.session_state.page == "📋 Board":
@@ -97,55 +141,124 @@ elif st.session_state.page == "📋 Board":
                     supabase.table("notes").delete().eq("id", n['id']).execute()
                     st.rerun()
 
-# --- SEITE: LAGER ---
-elif st.session_state.page == "📦 Lager":
-    st.header("📦 Lagerverwaltung & Buchung")
+# --- SEITE: PROJEKTE (Neu!) ---
+elif st.session_state.page == "🏗️ Projekte":
+    st.header("🏗️ Projekt-Verwaltung")
     
-    res = supabase.table("materials").select("*").execute()
-    mats = res.data if res.data else []
+    with st.expander("➕ Neue Baustelle anlegen"):
+        with st.form("new_project"):
+            p_name = st.text_input("Projekt Name (z.B. Objekt Müller)")
+            p_client = st.text_input("Kunde")
+            p_address = st.text_input("Adresse")
+            if st.form_submit_button("Projekt erstellen"):
+                supabase.table("projects").insert({
+                    "project_name": p_name, 
+                    "client_name": p_client, 
+                    "address": p_address
+                }).execute()
+                st.success("Projekt angelegt!")
+                st.rerun()
+
+    # Liste der Projekte anzeigen
+    res = supabase.table("projects").select("*").execute()
+    projs = res.data if res.data else []
+    if projs:
+        st.subheader("Aktuelle Baustellen")
+        for p in projs:
+            with st.container(border=True):
+                st.write(f"**{p['project_name']}** - {p['client_name']}")
+                st.caption(f"📍 {p['address']}")
+
+# --- SEITE: ERFASSUNG ---
+elif st.session_state.page == "⏱️ Erfassung":
+    st.header("⏱️ Zeit & Material erfassen")
     
-    if not mats:
-        st.info("Keine Materialien gefunden.")
+    # Projekte für Dropdown laden
+    res_p = supabase.table("projects").select("id, project_name").execute()
+    projs = res_p.data if res_p.data else []
+    
+    if not projs:
+        st.warning("Bitte lege zuerst ein Projekt unter '🏗️ Projekte' an!")
     else:
-        df = pd.DataFrame(mats)
-        st.dataframe(df[["name", "stock_quantity", "unit", "price_per_unit"]], use_container_width=True)
+        proj_options = {p['project_name']: p['id'] for p in projs}
         
-        st.divider()
         col1, col2 = st.columns(2)
         
         with col1:
-            st.subheader("📤 Verbrauch buchen")
-            with st.form("usage_form", clear_on_submit=True):
-                m_choice = st.selectbox("Material wählen", [m['name'] for m in mats])
-                m_qty = st.number_input("Menge entnommen", min_value=0.0, step=1.0)
-                m_project = st.text_input("Für Projekt/Baustelle", value="Allgemein")
-                
-                if st.form_submit_button("Verbrauch Speichern"):
-                    selected_mat = next(m for m in mats if m['name'] == m_choice)
-                    new_qty = float(selected_mat['stock_quantity']) - m_qty
-                    cost = m_qty * float(selected_mat['price_per_unit'])
-                    
-                    supabase.table("materials").update({"stock_quantity": new_qty}).eq("id", selected_mat['id']).execute()
-                    supabase.table("notes").insert({
-                        "content": f"Verbrauch: {m_qty}x {m_choice}",
-                        "category": "Material",
-                        "project_name": m_project,
-                        "cost_amount": cost
+            st.subheader("🕒 Arbeitszeit")
+            with st.form("time_entry", clear_on_submit=True):
+                p_choice = st.selectbox("Projekt", options=list(proj_options.keys()))
+                worker = st.text_input("Mitarbeiter")
+                h_val = st.number_input("Stunden", min_value=0.25, step=0.25)
+                work_desc = st.text_area("Tätigkeit")
+                if st.form_submit_button("Zeit buchen"):
+                    supabase.table("work_hours").insert({
+                        "project_id": proj_options[p_choice],
+                        "worker_name": worker,
+                        "hours": h_val,
+                        "description": work_desc
                     }).execute()
-                    
-                    st.success(f"Gebucht! Neuer Restbestand: {new_qty}")
-                    st.rerun()
+                    # Automatisch Eintrag ins Board für die Historie
+                    supabase.table("notes").insert({
+                        "content": f"Arbeitszeit: {worker} ({h_val}h) - {work_desc}",
+                        "project_name": p_choice,
+                        "category": "Aufgabe"
+                    }).execute()
+                    st.success("Zeit erfolgreich gebucht!")
 
         with col2:
-            st.subheader("📥 Inventur")
-            with st.form("inv_form", clear_on_submit=True):
-                m_choice_inv = st.selectbox("Material korrigieren", [m['name'] for m in mats])
-                m_new_total = st.number_input("Tatsächlicher Bestand", min_value=0.0)
-                if st.form_submit_button("Bestand Aktualisieren"):
-                    sel_inv = next(m for m in mats if m['name'] == m_choice_inv)
-                    supabase.table("materials").update({"stock_quantity": m_new_total}).eq("id", sel_inv['id']).execute()
-                    st.success("Lagerbestand angepasst!")
-                    st.rerun()
+            st.subheader("🧱 Material")
+            with st.form("mat_entry", clear_on_submit=True):
+                p_choice_m = st.selectbox("Projekt", options=list(proj_options.keys()))
+                m_name = st.text_input("Was wurde verbraucht?")
+                m_cost = st.number_input("Kosten in €", min_value=0.0)
+                if st.form_submit_button("Material buchen"):
+                    supabase.table("notes").insert({
+                        "content": f"Material: {m_name}",
+                        "project_name": p_choice_m,
+                        "category": "Material",
+                        "cost_amount": m_cost
+                    }).execute()
+                    st.success("Material erfasst!")
+    
+    # Projekte für das Dropdown laden
+    res_p = supabase.table("projects").select("id, project_name").execute()
+    projs = res_p.data if res_p.data else []
+    proj_options = {p['project_name']: p['id'] for p in projs}
+
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🕒 Arbeitszeit buchen")
+        with st.form("time_form"):
+            selected_p = st.selectbox("Projekt", options=list(proj_options.keys()))
+            worker = st.text_input("Mitarbeiter Name")
+            h_qty = st.number_input("Stunden", min_value=0.5, step=0.5)
+            desc = st.text_input("Was wurde gemacht?")
+            if st.form_submit_button("Zeit speichern"):
+                supabase.table("work_hours").insert({
+                    "project_id": proj_options[selected_p],
+                    "worker_name": worker,
+                    "hours": h_qty,
+                    "description": desc
+                }).execute()
+                st.success("Zeit gebucht!")
+
+    with col2:
+        st.subheader("🧱 Materialverbrauch")
+        with st.form("mat_form"):
+            selected_p_mat = st.selectbox("Projekt", options=list(proj_options.keys()))
+            mat_name = st.text_input("Material (z.B. 5x OSB Platten)")
+            mat_cost = st.number_input("Kosten (optional)", min_value=0.0)
+            if st.form_submit_button("Material speichern"):
+                # Das landet wie gewohnt im Board für die Übersicht
+                supabase.table("notes").insert({
+                    "content": f"Material: {mat_name}",
+                    "project_name": selected_p_mat,
+                    "category": "Material",
+                    "cost_amount": mat_cost
+                }).execute()
+                st.success("Material erfasst!")
 
 # --- SEITE: STATISTIK ---
 elif st.session_state.page == "📊 Stats":
