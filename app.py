@@ -261,25 +261,65 @@ elif st.session_state.page == "⏱️ Erfassung":
                 st.success("Material erfasst!")
 
 # --- SEITE: STATISTIK ---
+# --- SEITE: STATISTIK (Update v3.0) ---
 elif st.session_state.page == "📊 Stats":
-    st.header("📊 Kosten-Übersicht")
-    res = supabase.table("notes").select("project_name, cost_amount, category").execute()
-    data = res.data if res.data else []
+    st.header("📊 Projekt-Controlling")
     
-    if not data:
-        st.info("Noch keine Kostendaten vorhanden.")
+    # 1. Daten laden
+    res_notes = supabase.table("notes").select("project_name, cost_amount, category").execute()
+    res_hours = supabase.table("work_hours").select("project_id, hours").execute()
+    res_projs = supabase.table("projects").select("id, project_name").execute()
+    
+    notes_df = pd.DataFrame(res_notes.data) if res_notes.data else pd.DataFrame()
+    hours_df = pd.DataFrame(res_hours.data) if res_hours.data else pd.DataFrame()
+    projs_df = pd.DataFrame(res_projs.data) if res_projs.data else pd.DataFrame()
+
+    if projs_df.empty:
+        st.info("Noch keine Daten für die Auswertung vorhanden.")
     else:
-        df = pd.DataFrame(data)
-        total_costs = df['cost_amount'].sum()
-        st.metric("Gesamtausgaben (Material)", f"{total_costs:,.2f} €")
+        # Stundensatz definieren (später über Einstellungen anpassbar)
+        HOURLY_RATE = 55.0  
+
+        # 2. Kennzahlen berechnen
+        total_mat = notes_df['cost_amount'].sum() if not notes_df.empty else 0
+        total_hours = hours_df['hours'].sum() if not hours_df.empty else 0
+        total_labor = total_hours * HOURLY_RATE
         
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Gesamt Material", f"{total_mat:,.2f} €")
+        c2.metric("Gesamt Arbeitsstunden", f"{total_hours} h")
+        c3.metric("Kalk. Lohnkosten", f"{total_labor:,.2f} €", delta=f"{HOURLY_RATE}€/h")
+
         st.divider()
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("💰 Kosten pro Projekt")
-            project_costs = df.groupby('project_name')['cost_amount'].sum().sort_values(ascending=False)
-            st.bar_chart(project_costs)
-        with col2:
-            st.subheader("📋 Einträge pro Projekt")
-            project_counts = df['project_name'].value_counts()
-            st.area_chart(project_counts)
+
+        # 3. Grafik: Kosten pro Projekt
+        st.subheader("💰 Kostenverteilung nach Baustelle")
+        
+        # Daten für Grafik zusammenführen
+        # A) Materialkosten pro Projekt
+        if not notes_df.empty:
+            mat_per_proj = notes_df.groupby('project_name')['cost_amount'].sum().reset_index()
+        else:
+            mat_per_proj = pd.DataFrame(columns=['project_name', 'cost_amount'])
+
+        # B) Lohnkosten pro Projekt (Mapping ID zu Name)
+        if not hours_df.empty:
+            id_to_name = dict(zip(projs_df['id'], projs_df['project_name']))
+            hours_df['project_name'] = hours_df['project_id'].map(id_to_name)
+            labor_per_proj = hours_df.groupby('project_name')['hours'].sum().reset_index()
+            labor_per_proj['labor_costs'] = labor_per_proj['hours'] * HOURLY_RATE
+        else:
+            labor_per_proj = pd.DataFrame(columns=['project_name', 'labor_costs'])
+
+        # Zusammenführen für ein Balkendiagramm
+        chart_data = pd.merge(mat_per_proj, labor_per_proj, on='project_name', how='outer').fillna(0)
+        chart_data = chart_data.rename(columns={'cost_amount': 'Material', 'labor_costs': 'Lohn'})
+        
+        if not chart_data.empty:
+            st.bar_chart(chart_data.set_index('project_name')[['Material', 'Lohn']])
+        else:
+            st.write("Noch keine Buchungen vorhanden.")
+
+        # 4. Detail-Liste
+        st.subheader("📋 Projekt-Details")
+        st.table(chart_data)
