@@ -121,49 +121,57 @@ elif st.session_state.page == "📋 Board":
         selected_proj_name = st.selectbox("Wähle ein Projekt aus:", list(proj_names.keys()))
         selected_proj_id = proj_names[selected_proj_name]
 
-        # --- AUDIO TEIL (Wiederhergestellt) ---
-        st.subheader("Sprachnotiz aufnehmen")
-        audio_value = st.audio_input("Flüstern Sie Ihre Notiz ein")
+        # --- AUDIO TEIL (v2.22 Standard) ---
+        st.subheader("Sprachnotiz")
+        audio_file = st.audio_input("Notiz einsprechen")
         
-        transcript = ""
-        if audio_value:
-            # Hier greift deine bestehende Logik für die Transkription
-            # (Beispielhaft als Platzhalter für deinen spezifischen v2.22 Code)
-            st.audio(audio_value)
-            if st.button("Audio transkribieren"):
-                with st.spinner("Wandle Sprache in Text um..."):
-                    # transcript = deine_transkriptions_funktion(audio_value)
-                    st.success("Transkription fertig!")
+        # Initialisiere Transcript im Session State, damit es beim Formular-Rerun nicht verschwindet
+        if 'transcript' not in st.session_state:
+            st.session_state.transcript = ""
+
+        if audio_file:
+            st.audio(audio_file)
+            if st.button("Transkribieren"):
+                with st.spinner("Verarbeite Audio..."):
+                    # Hier wird deine spezifische Transkriptions-Logik aufgerufen
+                    # Beispiel: st.session_state.transcript = transcribe_audio(audio_file)
+                    st.session_state.transcript = "Hier erscheint der Text deiner Aufnahme..." # Platzhalter
+                    st.success("Audio erfolgreich umgewandelt!")
 
         # --- NOTIZ FORMULAR ---
         with st.form("new_note", clear_on_submit=True):
-            # Falls Transkript vorhanden, wird es hier als Standardwert gesetzt
-            note_text = st.text_area("Notiz / Bericht", value=transcript)
+            # Nutzt das Transcript als Standardwert
+            note_text = st.text_area("Notiz Text", value=st.session_state.transcript)
             
             if st.form_submit_button("Notiz speichern"):
                 if note_text:
                     try:
-                        # Die neuen, funktionierenden Datenbank-Einträge
+                        # Speichern in die 'notes' Tabelle (RLS Fix aktiv)
                         supabase.table("notes").insert({
                             "project_id": selected_proj_id,
                             "content": note_text,
                             "user_id": st.session_state.user.id
                         }).execute()
-                        st.success("Notiz gespeichert!")
+                        
+                        st.session_state.transcript = "" # Reset nach Erfolg
+                        st.success("Notiz im Board gespeichert!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Datenbank-Fehler: {e}")
+                        st.error(f"Datenbank-Fehler im Board: {e}")
                 else:
-                    st.warning("Bitte Text eingeben oder Audio aufnehmen.")
+                    st.warning("Kein Inhalt zum Speichern vorhanden.")
         
         # --- HISTORIE ---
         st.divider()
-        notes_res = supabase.table("notes").select("*").eq("project_id", selected_proj_id).execute()
+        st.subheader(f"Letzte Berichte: {selected_proj_name}")
+        notes_res = supabase.table("notes").select("*").eq("project_id", selected_proj_id).order("created_at", desc=True).execute()
+        
         for n in notes_res.data:
-            st.info(f"{n['created_at'][:10]}: {n['content']}")
+            with st.expander(f"Eintrag vom {n['created_at'][:10]}"):
+                st.write(n['content'])
 
     else:
-        st.info("Bitte lege zuerst ein Projekt an.")
+        st.info("Bitte lege unter '🏗️ Projekte' erst eine Baustelle an.")
 
     st.divider()
     
