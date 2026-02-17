@@ -86,19 +86,17 @@ elif st.session_state.page == "🏗️ Projekte":
         p_client = st.text_input("Kunde")
         
         if st.form_submit_button("Speichern"):
-            if p_name: # Zeile 87
-                # AB HIER: Alles muss eingerückt sein (4 Leerzeichen oder 1 Tab)
+            if p_name:
                 try:
-                    user_data = {
+                    # Wir lassen 'user_id' weg, da die DB das jetzt automatisch macht!
+                    supabase.table("projects").insert({
                         "project_name": p_name, 
-                        "client_name": p_client,
-                        "user_id": st.session_state.user.id
-                    }
-                    supabase.table("projects").insert(user_data).execute()
-                    st.success("Projekt erfolgreich gespeichert!")
+                        "client_name": p_client
+                    }).execute()
+                    st.success("Projekt gespeichert!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Fehler: {e}")
+                    st.error(f"Datenbank-Fehler: {e}")
     
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
