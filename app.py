@@ -82,25 +82,35 @@ if st.session_state.page == "🏠 Home":
 elif st.session_state.page == "🏗️ Projekte":
     st.header("🏗️ Baustellen anlegen")
     
-    # Formular zum Anlegen neuer Projekte
     with st.form("new_proj", clear_on_submit=True):
         p_name = st.text_input("Projektname")
         p_client = st.text_input("Kunde")
         
         if st.form_submit_button("Speichern"):
-            if p_name:
+            # 1. Sicherstellen, dass ein User eingeloggt ist
+            if not st.session_state.get('user'):
+                st.error("Fehler: Du bist nicht eingeloggt. Bitte lade die Seite neu und melde dich an.")
+            elif p_name:
                 try:
-                    # Dank SQL-CASCADE-Fix: user_id wird automatisch von DB gesetzt
-                    supabase.table("projects").insert({
+                    # Wir holen die ID explizit aus der Session
+                    current_user_id = st.session_state.user.id
+                    
+                    # 2. Wir senden die Daten inkl. ID explizit mit
+                    data = {
                         "project_name": p_name, 
-                        "client_name": p_client
-                    }).execute()
-                    st.success(f"Projekt '{p_name}' wurde erfolgreich angelegt!")
+                        "client_name": p_client,
+                        "user_id": current_user_id
+                    }
+                    
+                    supabase.table("projects").insert(data).execute()
+                    st.success(f"Projekt '{p_name}' erfolgreich gespeichert!")
                     st.rerun()
                 except Exception as e:
+                    # Hier geben wir jetzt GENAU aus, was schiefläuft
                     st.error(f"Datenbank-Fehler: {e}")
+                    st.info(f"Versuchte User-ID: {current_user_id}")
             else:
-                st.warning("Bitte gib mindestens einen Projektnamen an.")
+                st.warning("Bitte gib einen Projektnamen ein.")
     
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
