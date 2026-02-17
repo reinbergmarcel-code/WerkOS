@@ -3,6 +3,36 @@ from audio_recorder_streamlit import audio_recorder
 from supabase import create_client
 import pandas as pd
 import uuid
+# --- AUTH LOGIK ---
+if 'user' not in st.session_state:
+    st.session_state.user = None
+
+def login():
+    st.title("🔐 WerkOS Pro Login")
+    with st.form("login_form"):
+        email = st.text_input("E-Mail")
+        password = st.text_input("Passwort", type="password")
+        if st.form_submit_button("Anmelden"):
+            try:
+                # Supabase Auth Call
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                st.session_state.user = res.user
+                st.success("Erfolgreich eingeloggt!")
+                st.rerun()
+            except Exception as e:
+                st.error("Login fehlgeschlagen. Bitte Daten prüfen.")
+
+if st.session_state.user is None:
+    login()
+    st.stop() # Hier bricht das Skript ab, wenn man nicht eingeloggt ist
+
+# --- AB HIER FOLGT DEIN BESTEHENDER CODE (Sidebar, Seiten etc.) ---
+# Tipp: Füge einen Logout-Button in die Sidebar ein:
+with st.sidebar:
+    if st.button("🚪 Logout"):
+        supabase.auth.sign_out()
+        st.session_state.user = None
+        st.rerun()
 
 # 1. Datenbank Verbindung
 try:
