@@ -87,30 +87,20 @@ elif st.session_state.page == "🏗️ Projekte":
         p_client = st.text_input("Kunde")
         
         if st.form_submit_button("Speichern"):
-            # 1. Sicherstellen, dass ein User eingeloggt ist
-            if not st.session_state.get('user'):
-                st.error("Fehler: Du bist nicht eingeloggt. Bitte lade die Seite neu und melde dich an.")
-            elif p_name:
+            if p_name:
                 try:
-                    # Wir holen die ID explizit aus der Session
-                    current_user_id = st.session_state.user.id
-                    
-                    # 2. Wir senden die Daten inkl. ID explizit mit
-                    data = {
+                    # Wir senden die Daten. 
+                    # Durch 'USING (true)' im SQL oben MUSS die DB das jetzt annehmen.
+                    supabase.table("projects").insert({
                         "project_name": p_name, 
                         "client_name": p_client,
-                        "user_id": current_user_id
-                    }
+                        "user_id": st.session_state.user.id
+                    }).execute()
                     
-                    supabase.table("projects").insert(data).execute()
-                    st.success(f"Projekt '{p_name}' erfolgreich gespeichert!")
+                    st.success(f"Baustelle '{p_name}' wurde angelegt!")
                     st.rerun()
                 except Exception as e:
-                    # Hier geben wir jetzt GENAU aus, was schiefläuft
-                    st.error(f"Datenbank-Fehler: {e}")
-                    st.info(f"Versuchte User-ID: {current_user_id}")
-            else:
-                st.warning("Bitte gib einen Projektnamen ein.")
+                    st.error(f"Sogar mit Notregel Fehler: {e}")
     
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
