@@ -67,55 +67,98 @@ elif st.session_state.page == "🏗️ Projekte":
                     st.rerun()
 
 # --- SEITE: BOARD (Inkl. AUDIO & FOTO) ---
-elif st.session_state.page == "📋 Board":
+# --- SEITE: BOARD / DOKU (Optimiert) ---
+elif st.session_state.page == "📋 Board / Doku":
     st.header("📋 Baustellen-Dokumentation")
     
-    # 1. Audio Aufnahme
-    st.subheader("🎤 Sprachnotiz")
-    audio_bytes = audio_recorder(text="Klicken zum Aufnehmen", icon_size="2x")
-    if audio_bytes:
-        st.audio(audio_bytes, format="audio/wav")
-        if st.button("Audio-Notiz speichern"):
-            file_name = f"audio_{uuid.uuid4()}.wav"
-            supabase.storage.from_("werkos_media").upload(file_name, audio_bytes)
-            audio_url = supabase.storage.from_("werkos_media").get_public_url(file_name)
-            supabase.table("notes").insert({
-                "content": "Sprachnotiz", "image_url": audio_url, "category": "Audio"
-            }).execute()
-            st.success("Audio gespeichert!")
-
-    st.divider()
-
-    # 2. Foto & Text
-    with st.expander("📸 Neues Foto / Notiz"):
-        img_file = st.camera_input("Foto")
-        with st.form("note_form", clear_on_submit=True):
-            m_content = st.text_input("Notiz-Text")
+    # 1. Schnelle Erfassung (Tabs für die Eingabemethode)
+    tab1, tab2, tab3 = st.tabs(["✍️ Text-Notiz", "🎤 Sprachnotiz", "📸 Foto"])
+    
+    with tab1:
+        with st.form("text_note_form", clear_on_submit=True):
+            t_content = st.text_area("Was gibt es zu berichten?")
             res_p = supabase.table("projects").select("project_name").execute()
             p_list = [p['project_name'] for p in res_p.data] if res_p.data else ["Allgemein"]
-            m_project = st.selectbox("Projekt", options=p_list)
-            
-            if st.form_submit_button("Speichern"):
-                file_url = None
-                if img_file:
+            t_project = st.selectbox("Projekt wählen", options=p_list, key="t_proj")
+            if st.form_submit_button("Notiz speichern"):
+                if t_content:
+                    supabase.table("notes").insert({
+                        "content": t_content, "project_name": t_project, "category": "Notiz"
+                    }).execute()
+                    st.success("Notiz gespeichert!")
+                    st.rerun()
+
+    with tab2:
+        st.write("Drücke auf das Mikrofon, um die Aufnahme zu starten:")
+        audio_bytes = audio_recorder(text="Aufnahme", icon_size="2x", key="board_mic")
+        if audio_bytes:
+            st.audio(audio_bytes, format="audio/wav")
+            res_p = supabase.table("projects").select("project_name").execute()
+            p_list = [p['project_name'] for p in res_p.data] if res_p.data else ["Allgemein"]
+            a_project = st.selectbox("Projekt für Audio wählen", options=p_list, key="a_proj")
+            if st.button("🎤 Sprachnotiz hochladen"):
+                file_name = f"audio_{uuid.uuid4()}.wav"
+                supabase.storage.from_("werkos_media").upload(file_name, audio_bytes)
+                audio_url = supabase.storage.from_("werkos_media").get_public_url(file_name)
+                supabase.table("notes").insert({
+                    "content": "Sprachnachricht", "image_url": audio_url, 
+                    "project_name": a_project, "category": "Audio"
+                }).execute()
+                st.success("Sprachnotiz gespeichert!")
+                st.rerun()
+
+    with tab3:
+        img_file = st.camera_input("Baustellenfoto machen")
+        if img_file:
+            with st.form("photo_form"):
+                p_list_photo = [p['project_name'] for p in (supabase.table("projects").select("project_name").execute()).data] if p_list else ["Allgemein"]
+                f_project = st.selectbox("Projekt für Foto", options=p_list_photo)
+                f_desc = st.text_input("Kurze Beschreibung zum Foto")
+                if st.form_submit_button("Foto hochladen"):
                     f_name = f"{uuid.uuid4()}.jpg"
                     supabase.storage.from_("werkos_media").upload(f_name, img_file.getvalue())
                     file_url = supabase.storage.from_("werkos_media").get_public_url(f_name)
-                supabase.table("notes").insert({
-                    "content": m_content, "project_name": m_project,
-                    "image_url": file_url, "category": "Notiz"
-                }).execute()
-                st.rerun()
+                    supabase.table("notes").insert({
+                        "content": f_desc if f_desc else "Foto-Dokumentation", 
+                        "project_name": f_project, "image_url": file_url, "category": "Foto"
+                    }).execute()
+                    st.success("Foto gespeichert!")
+                    st.rerun()
 
-    # Anzeige
+    st.divider()
+
+    # 2. Anzeige der Einträge (Filterbar)
     res_n = supabase.table("notes").select("*").order("created_at", desc=True).execute()
-    for n in (res_n.data if res_n.data else []):
-        with st.container(border=True):
-            st.write(f"**{n.get('project_name', 'Allgemein')}** - {n['created_at'][:10]}")
-            st.write(n['content'])
-            if n.get('image_url'):
-                if ".wav" in n['image_url']: st.audio(n['image_url'])
-                else: st.image(n['image_url'], width=300)
+    notes_data = res_n.data if res_n.data else []
+    
+    if not notes_data:
+        st.info("Noch keine Einträge im Board vorhanden.")
+    else:
+        for n in notes_data:
+            # Farben für die Badges festlegen
+            cat = n.get('category', 'Notiz')
+            color = "blue"
+            if cat == "Audio": color = "red"
+            elif cat == "Material": color = "green"
+            elif cat == "Foto": color = "orange"
+            
+            with st.container(border=True):
+                col_meta, col_del = st.columns([5, 1])
+                with col_meta:
+                    st.markdown(f"**:{color}[{cat}]** | 🏗️ {n.get('project_name', 'Allgemein')} | 📅 {n['created_at'][:10]}")
+                with col_del:
+                    if st.button("🗑️", key=f"del_{n['id']}"):
+                        supabase.table("notes").delete().eq("id", n['id']).execute()
+                        st.rerun()
+                
+                st.write(n['content'])
+                
+                # Medium anzeigen (Audio oder Bild)
+                if n.get('image_url'):
+                    if ".wav" in n['image_url']:
+                        st.audio(n['image_url'])
+                    else:
+                        st.image(n['image_url'], width=400)
 
 # --- SEITE: ERFASSUNG ---
 elif st.session_state.page == "⏱️ Erfassung":
