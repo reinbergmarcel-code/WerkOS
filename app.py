@@ -91,10 +91,16 @@ elif st.session_state.page == "🏗️ Projekte":
         p_name = st.text_input("Projektname")
         p_client = st.text_input("Kunde")
         
+        elif st.session_state.page == "🏗️ Projekte":
+    st.header("🏗️ Baustellen anlegen")
+    with st.form("new_proj"):
+        p_name = st.text_input("Projektname")
+        p_client = st.text_input("Kunde")
+        
         if st.form_submit_button("Speichern"):
             if p_name:
                 try:
-                    # Die Datenbank setzt die user_id jetzt von selbst!
+                    # Dank SQL-CASCADE-Fix: Keine user_id im Code nötig!
                     supabase.table("projects").insert({
                         "project_name": p_name, 
                         "client_name": p_client
