@@ -117,14 +117,14 @@ elif st.session_state.page == "📋 Board":
     projects = proj_response.data
 
     if projects:
-    # Hier erstellen wir das Wörterbuch: Name -> ID
-    proj_dict = {p['project_name']: p['id'] for p in projects}
-    
-    # Auswahlbox zeigt den Namen
-    selected_proj_name = st.selectbox("Wähle ein Projekt aus:", list(proj_dict.keys()))
-    
-    # HIER WIRD DIE ID GEHOLT - Das ist die wichtigste Zeile!
-    selected_proj_id = proj_dict[selected_proj_name]
+        # Dieser Block muss eingerückt sein!
+        proj_dict = {p['project_name']: p['id'] for p in projects}
+        
+        # Die Auswahlbox zeigt den Namen
+        selected_proj_name = st.selectbox("Wähle ein Projekt aus:", list(proj_dict.keys()))
+        
+        # Hier holen wir die ID für die Datenbank
+        selected_proj_id = proj_dict[selected_proj_name]
 
     # ... im Speicher-Formular dann:
     if st.form_submit_button("Eintrag speichern"):
