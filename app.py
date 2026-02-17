@@ -117,9 +117,27 @@ elif st.session_state.page == "📋 Board":
     projects = proj_response.data
 
     if projects:
-        proj_names = {p['project_name']: p['id'] for p in projects}
-        selected_proj_name = st.selectbox("Wähle ein Projekt aus:", list(proj_names.keys()))
-        selected_proj_id = proj_names[selected_proj_name]
+    # Hier erstellen wir das Wörterbuch: Name -> ID
+    proj_dict = {p['project_name']: p['id'] for p in projects}
+    
+    # Auswahlbox zeigt den Namen
+    selected_proj_name = st.selectbox("Wähle ein Projekt aus:", list(proj_dict.keys()))
+    
+    # HIER WIRD DIE ID GEHOLT - Das ist die wichtigste Zeile!
+    selected_proj_id = proj_dict[selected_proj_name]
+
+    # ... im Speicher-Formular dann:
+    if st.form_submit_button("Eintrag speichern"):
+        try:
+            supabase.table("notes").insert({
+                "project_id": selected_proj_id,  # Hier muss die UUID landen
+                "content": note_text,
+                "user_id": st.session_state.user.id
+            }).execute()
+            st.success("Gespeichert!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Fehler: {e}")
 
         # --- AUDIO & FOTO SEKTION ---
         col1, col2 = st.columns(2)
