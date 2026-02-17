@@ -89,19 +89,20 @@ elif st.session_state.page == "🏗️ Projekte":
         if st.form_submit_button("Speichern"):
             if p_name:
                 try:
-                    # Minimaler Insert ohne RLS-Hürden
-                    supabase.table("projects").insert({
+                    # Wir definieren das Paket ganz präzise
+                    projekt_daten = {
                         "project_name": p_name, 
                         "client_name": p_client,
-                        "user_id": st.session_state.user.id
-                    }).execute()
+                        "user_id": st.session_state.user.id  # Hier holen wir deine ID
+                    }
                     
-                    st.success("Projekt erfolgreich gespeichert!")
+                    # Und schießen es in die Tabelle
+                    supabase.table("projects").insert(projekt_daten).execute()
+                    
+                    st.success(f"Projekt '{p_name}' wurde für dich gespeichert!")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Kritischer Fehler: {e}")
-            else:
-                st.warning("Bitte Projektnamen angeben.")
+                    st.error(f"Fehler beim Zuordnen: {e}")
     
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
