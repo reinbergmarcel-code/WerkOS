@@ -143,21 +143,35 @@ elif st.session_state.page == "📋 Board":
                 st.session_state.transcript = "Transkribierter Text erscheint hier..." 
 
         # --- SPEICHER FORMULAR ---
+        # --- SPEICHER FORMULAR ---
         with st.form("new_note_entry", clear_on_submit=True):
             note_text = st.text_area("Bericht / Details", value=st.session_state.transcript)
+            
             if st.form_submit_button("Eintrag speichern"):
-            if note_text or photo_file:
-                try:
-                    # Hier wird die ECHTE ID aus der Auswahlbox genommen
-                    supabase.table("notes").insert({
-                        "project_id": selected_proj_id, 
-                        "content": note_text,
-                        "image_url": photo_url,
-                        "user_id": st.session_state.user.id
-                    }).execute()
-                    
-                    st.success("Erfolgreich gespeichert!")
-                    st.rerun()
+                if note_text or photo_file:  # <--- Zeile 148/149 Fix
+                    try:
+                        # 1. Foto-Logik
+                        photo_url = None
+                        if photo_file:
+                            file_path = f"{st.session_state.user.id}/{selected_proj_id}_{photo_file.name}"
+                            supabase.storage.from_("project_files").upload(file_path, photo_file.getvalue())
+                            photo_url = supabase.storage.from_("project_files").get_public_url(file_path)
+
+                        # 2. Datenbank-Eintrag
+                        supabase.table("notes").insert({
+                            "project_id": selected_proj_id,
+                            "content": note_text,
+                            "image_url": photo_url,
+                            "user_id": st.session_state.user.id
+                        }).execute()
+                        
+                        st.session_state.transcript = ""
+                        st.success("Eintrag gespeichert!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Fehler: {e}")
+                else:
+                    st.warning("Bitte Text eingeben oder Foto aufnehmen.")
         
         # --- HISTORIE ANZEIGEN ---
         st.divider()
