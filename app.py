@@ -3,6 +3,30 @@ from audio_recorder_streamlit import audio_recorder
 from supabase import create_client
 import pandas as pd
 import uuid
+# --- NEU: AUTHENTIFIZIERUNG (Schutzschild) ---
+if 'user' not in st.session_state:
+    st.session_state.user = None
+
+def login_mask():
+    st.title("🔐 WerkOS Pro Login")
+    with st.form("login_form"):
+        email = st.text_input("E-Mail")
+        password = st.text_input("Passwort", type="password")
+        if st.form_submit_button("Anmelden", use_container_width=True):
+            try:
+                res = supabase.auth.sign_in_with_password({"email": email, "password": password})
+                st.session_state.user = res.user
+                st.success("Login erfolgreich!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Fehler: {str(e)}")
+
+# Wenn kein User eingeloggt, zeige Login und STOPPE den Rest des Codes
+if st.session_state.user is None:
+    login_mask()
+    st.stop() 
+
+# --- AB HIER FOLGT DEIN BESTEHENDER v2.22 CODE UNVERÄNDERT ---
 
 # 1. DATENBANK VERBINDUNG (Original v2.22)
 try:
