@@ -86,12 +86,22 @@ elif st.session_state.page == "🏗️ Projekte":
         p_client = st.text_input("Kunde")
         if st.form_submit_button("Speichern"):
             if p_name:
-                supabase.table("projects").insert({
-                    "project_name": p_name, 
-                    "client_name": p_client,
-                    "user_id": st.session_state.user.id  # <-- Hier darf kein Tippfehler sein
-                }).execute()
-                st.rerun()
+                # Wir holen die ID explizit ab
+                uid = st.session_state.user.id
+                
+                # Test-Ausgabe (kannst du später löschen)
+                # st.write(f"Speichere für User: {uid}") 
+
+                try:
+                    supabase.table("projects").insert({
+                        "project_name": p_name, 
+                        "client_name": p_client,
+                        "user_id": uid
+                    }).execute()
+                    st.success("Projekt gespeichert!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Fehler beim Speichern: {e}")
     
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
