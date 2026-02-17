@@ -85,14 +85,13 @@ elif st.session_state.page == "🏗️ Projekte":
         p_name = st.text_input("Projektname")
         p_client = st.text_input("Kunde")
         if st.form_submit_button("Speichern"):
-            if p_name:
-                # NUR HIER WURDE user_id ERGÄNZT:
-                supabase.table("projects").insert({
-                    "project_name": p_name, 
-                    "client_name": p_client,
-                    "user_id": st.session_state.user.id # <--- Diese Zeile einfügen
-                }).execute()
-                st.rerun()
+    if p_name:
+        supabase.table("projects").insert({
+            "project_name": p_name, 
+            "client_name": p_client,
+            "user_id": st.session_state.user.id  # <-- Das MUSS hier stehen
+        }).execute()
+        st.rerun()
     
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
