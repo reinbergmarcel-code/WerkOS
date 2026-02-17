@@ -81,44 +81,31 @@ if st.session_state.page == "🏠 Home":
 # --- SEITE: PROJEKTE (Hinzugefügt) ---
 elif st.session_state.page == "🏗️ Projekte":
     st.header("🏗️ Baustellen anlegen")
-    with st.form("new_proj"):
-        p_name = st.text_input("Projektname")
-        p_client = st.text_input("Kunde")
-        
-        elif st.session_state.page == "🏗️ Projekte":
-    st.header("🏗️ Baustellen anlegen")
-    with st.form("new_proj"):
-        p_name = st.text_input("Projektname")
-        p_client = st.text_input("Kunde")
-        
-        elif st.session_state.page == "🏗️ Projekte":
-    st.header("🏗️ Baustellen anlegen")
     
-    with st.form("new_proj"):
+    # Formular zum Anlegen neuer Projekte
+    with st.form("new_proj", clear_on_submit=True):
         p_name = st.text_input("Projektname")
         p_client = st.text_input("Kunde")
         
         if st.form_submit_button("Speichern"):
             if p_name:
                 try:
-                    # Wir nutzen den SQL-Fix: Die DB setzt die user_id selbst!
+                    # Dank SQL-CASCADE-Fix: user_id wird automatisch von DB gesetzt
                     supabase.table("projects").insert({
                         "project_name": p_name, 
                         "client_name": p_client
                     }).execute()
-                    st.success("Projekt erfolgreich angelegt!")
+                    st.success(f"Projekt '{p_name}' wurde erfolgreich angelegt!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Datenbank-Fehler: {e}")
             else:
-                st.warning("Bitte gib einen Projektnamen ein.")
+                st.warning("Bitte gib mindestens einen Projektnamen an.")
     
     st.divider()
     res = supabase.table("projects").select("*").order("created_at", desc=True).execute()
     for p in (res.data if res.data else []):
         st.info(f"Projekt: {p['project_name']} (Kunde: {p['client_name']})")
-
-
 # --- SEITE: BOARD (RESTAURIERT & ERGÄNZT) ---
 elif st.session_state.page == "📋 Board":
     st.header("📋 Dokumentation")
