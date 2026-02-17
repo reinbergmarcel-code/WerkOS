@@ -134,21 +134,20 @@ with st.form("board_entry"):
     selected_p = st.selectbox("Projekt zuordnen", p_list)
     
     if st.form_submit_button("Eintrag speichern"):
-        f_url = None
-        if img_input:
-            f_name = f"{uuid.uuid4()}.jpg"
-            supabase.storage.from_("werkos_media").upload(f_name, img_input.getvalue())
-            f_url = supabase.storage.from_("werkos_media").get_public_url(f_name)
-        
-        # Hier wird add_user() um dein bestehendes Dictionary gelegt
-        supabase.table("notes").insert(add_user({
-            "content": text_input if text_input else "Foto-Doku",
-            "project_name": selected_p,
-            "image_url": f_url,
-            "category": "Notiz" if text_input else "Foto"
-        })).execute()
-        
-        st.rerun()
+            f_url = None
+            if img_input:
+                f_name = f"{uuid.uuid4()}.jpg"
+                supabase.storage.from_("werkos_media").upload(f_name, img_input.getvalue())
+                f_url = supabase.storage.from_("werkos_media").get_public_url(f_name)
+            
+            # Wichtig: Hier müssen alle drei Klammern am Ende stehen: }))
+            supabase.table("notes").insert(add_user({
+                "content": text_input if text_input else "Foto-Doku",
+                "project_name": selected_p,
+                "image_url": f_url,
+                "category": "Notiz" if text_input else "Foto"
+            })).execute()
+            st.rerun()
     st.divider()
     # Anzeige-Logik (Original v2.22 Style)
     res_n = supabase.table("notes").select("*").order("created_at", desc=True).execute()
@@ -174,7 +173,7 @@ elif st.session_state.page == "⏱️ Erfassung":
             worker = st.text_input("Wer?")
             h_val = st.number_input("Stunden", step=0.5)
             if st.form_submit_button("Zeit buchen"):
-                # Funktion add_user() mit runden Klammern ergänzt
+                # Auch hier: add_user( { ... } )
                 supabase.table("work_hours").insert(add_user({
                     "project_id": p_map[p_sel], 
                     "worker_name": worker, 
@@ -196,7 +195,6 @@ elif st.session_state.page == "⏱️ Erfassung":
                     "category": "Material"
                 })).execute()
                 st.success("Material gebucht")
-
 # --- SEITE: STATS ---
 elif st.session_state.page == "📊 Stats":
     st.header("📊 Statistik")
