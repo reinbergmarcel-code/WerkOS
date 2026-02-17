@@ -106,16 +106,19 @@ elif st.session_state.page == "📋 Board":
         img_file = st.camera_input("Foto")
         with st.form("board_form", clear_on_submit=True):
             m_content = st.text_input("Notiz")
+            # Wir behalten deine Projektauswahl bei
             m_project = st.selectbox("Projekt", options=projects if projects else ["Allgemein"])
+            
             if st.form_submit_button("Speichern"):
                 file_url = None
+                
+                # HIER WAR DER FEHLER: Die Einrückung muss exakt so sein
                 if img_file:
-                    # Diese Zeilen MÜSSEN eingerückt sein (4 Leerzeichen/1 Tab)
                     file_name = f"{uuid.uuid4()}.jpg"
                     supabase.storage.from_("werkos_media").upload(file_name, img_file.getvalue())
                     file_url = supabase.storage.from_("werkos_media").get_public_url(file_name)
                 
-                # Dieser Teil muss wieder auf der Ebene des 'if img_file' stehen
+                # Der Insert-Befehl bleibt wie er war, nur um die user_id ergänzt
                 supabase.table("notes").insert({
                     "content": m_content, 
                     "project_name": m_project,
