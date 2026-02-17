@@ -3,7 +3,16 @@ from audio_recorder_streamlit import audio_recorder
 from supabase import create_client
 import pandas as pd
 import uuid
-# --- NEU: AUTHENTIFIZIERUNG (Schutzschild) ---
+
+# 1. VERBINDUNG ZUERST DEFINIEREN (Wichtig!)
+try:
+    # Hier wird die Variable 'supabase' erstellt
+    supabase = create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_KEY"])
+except Exception as e:
+    st.error(f"Verbindung zu Supabase fehlgeschlagen: {e}")
+    st.stop()
+
+# 2. ERST JETZT FOLGT DER LOGIN-BLOCK
 if 'user' not in st.session_state:
     st.session_state.user = None
 
@@ -14,6 +23,7 @@ def login_mask():
         password = st.text_input("Passwort", type="password")
         if st.form_submit_button("Anmelden", use_container_width=True):
             try:
+                # Jetzt kennt das Programm 'supabase' und kann diesen Befehl ausführen
                 res = supabase.auth.sign_in_with_password({"email": email, "password": password})
                 st.session_state.user = res.user
                 st.success("Login erfolgreich!")
@@ -21,10 +31,11 @@ def login_mask():
             except Exception as e:
                 st.error(f"Fehler: {str(e)}")
 
-# Wenn kein User eingeloggt, zeige Login und STOPPE den Rest des Codes
 if st.session_state.user is None:
     login_mask()
     st.stop() 
+
+# --- AB HIER DEIN BESTEHENDER v2.22 CODE ---
 
 # --- AB HIER FOLGT DEIN BESTEHENDER v2.22 CODE UNVERÄNDERT ---
 
