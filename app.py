@@ -51,6 +51,10 @@ with st.sidebar:
     if st.button("⏱️ Erfassung", use_container_width=True): st.session_state.page = "⏱️ Erfassung"
     if st.button("📊 Stats", use_container_width=True): st.session_state.page = "📊 Stats"
     st.divider()
+    if st.button("🚪 Logout", use_container_width=True):
+        supabase.auth.sign_out()
+        st.session_state.user = None
+        st.rerun()
     st.caption("WerkOS v2.22 - Autarkes System")
 
 # --- SEITE: HOME ---
