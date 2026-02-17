@@ -110,3 +110,17 @@ elif st.session_state.page == "📋 Board":
             if st.form_submit_button("Speichern"):
                 file_url = None
                 if img_file:
+                    # Diese Zeilen MÜSSEN eingerückt sein (4 Leerzeichen/1 Tab)
+                    file_name = f"{uuid.uuid4()}.jpg"
+                    supabase.storage.from_("werkos_media").upload(file_name, img_file.getvalue())
+                    file_url = supabase.storage.from_("werkos_media").get_public_url(file_name)
+                
+                # Dieser Teil muss wieder auf der Ebene des 'if img_file' stehen
+                supabase.table("notes").insert({
+                    "content": m_content, 
+                    "project_name": m_project,
+                    "image_url": file_url, 
+                    "user_id": st.session_state.user.id, 
+                    "category": "Notiz"
+                }).execute()
+                st.rerun()
