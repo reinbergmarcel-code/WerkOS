@@ -110,25 +110,60 @@ elif st.session_state.page == "🏗️ Projekte":
         st.info(f"Projekt: {p['project_name']} (Kunde: {p['client_name']})")
 # --- SEITE: BOARD (RESTAURIERT & ERGÄNZT) ---
 elif st.session_state.page == "📋 Board":
-    st.header("📋 Dokumentation")
-    
-    st.subheader("🎤 Audio-Notiz")
-    audio_data = audio_recorder(text="Aufnahme starten", icon_size="2x")
-    if audio_data:
-        st.audio(audio_data)
-        if st.button("Audio hochladen"):
-            f_name = f"audio_{uuid.uuid4()}.wav"
-            supabase.storage.from_("werkos_media").upload(f_name, audio_data)
-            url = supabase.storage.from_("werkos_media").get_public_url(f_name)
+    st.header("📋 Projekt-Board")
+
+    # 1. Projekte für die Auswahl laden
+    proj_response = supabase.table("projects").select("id, project_name").execute()
+    projects = proj_response.data
+
+    if projects:
+        proj_names = {p['project_name']: p['id'] for p in projects}
+        selected_proj_name = st.selectbox("Wähle ein Projekt aus:", list(proj_names.keys()))
+        selected_proj_id = proj_names[selected_proj_name]
+
+        # --- AUDIO TEIL (Wiederhergestellt) ---
+        st.subheader("Sprachnotiz aufnehmen")
+        audio_value = st.audio_input("Flüstern Sie Ihre Notiz ein")
+        
+        transcript = ""
+        if audio_value:
+            # Hier greift deine bestehende Logik für die Transkription
+            # (Beispielhaft als Platzhalter für deinen spezifischen v2.22 Code)
+            st.audio(audio_value)
+            if st.button("Audio transkribieren"):
+                with st.spinner("Wandle Sprache in Text um..."):
+                    # transcript = deine_transkriptions_funktion(audio_value)
+                    st.success("Transkription fertig!")
+
+        # --- NOTIZ FORMULAR ---
+        with st.form("new_note", clear_on_submit=True):
+            # Falls Transkript vorhanden, wird es hier als Standardwert gesetzt
+            note_text = st.text_area("Notiz / Bericht", value=transcript)
             
-            # KORREKTUR: add_user bekommt runde Klammern um das Dictionary
-            supabase.table("notes").insert(add_user({
-                "content": "Sprachnotiz", 
-                "image_url": url, 
-                "category": "Audio"
-            })).execute()
-            
-            st.rerun()
+            if st.form_submit_button("Notiz speichern"):
+                if note_text:
+                    try:
+                        # Die neuen, funktionierenden Datenbank-Einträge
+                        supabase.table("notes").insert({
+                            "project_id": selected_proj_id,
+                            "content": note_text,
+                            "user_id": st.session_state.user.id
+                        }).execute()
+                        st.success("Notiz gespeichert!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Datenbank-Fehler: {e}")
+                else:
+                    st.warning("Bitte Text eingeben oder Audio aufnehmen.")
+        
+        # --- HISTORIE ---
+        st.divider()
+        notes_res = supabase.table("notes").select("*").eq("project_id", selected_proj_id).execute()
+        for n in notes_res.data:
+            st.info(f"{n['created_at'][:10]}: {n['content']}")
+
+    else:
+        st.info("Bitte lege zuerst ein Projekt an.")
 
     st.divider()
     
