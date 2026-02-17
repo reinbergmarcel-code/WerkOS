@@ -117,27 +117,46 @@ elif st.session_state.page == "📋 Board":
     projects = proj_response.data
 
     if projects:
-        # Dieser Block muss eingerückt sein!
+        # 1. Projekt-Zuordnung vorbereiten
         proj_dict = {p['project_name']: p['id'] for p in projects}
-        
-        # Die Auswahlbox zeigt den Namen
         selected_proj_name = st.selectbox("Wähle ein Projekt aus:", list(proj_dict.keys()))
-        
-        # Hier holen wir die ID für die Datenbank
         selected_proj_id = proj_dict[selected_proj_name]
 
-    # ... im Speicher-Formular dann:
-    if st.form_submit_button("Eintrag speichern"):
-        try:
-            supabase.table("notes").insert({
-                "project_id": selected_proj_id,  # Hier muss die UUID landen
-                "content": note_text,
-                "user_id": st.session_state.user.id
-            }).execute()
-            st.success("Gespeichert!")
-            st.rerun()
-        except Exception as e:
-            st.error(f"Fehler: {e}")
+        # 2. Das Formular (Alles darin MUSS eingerückt sein)
+        with st.form("new_note_entry", clear_on_submit=True):
+            st.subheader("Neuer Eintrag")
+            
+            # Textbereich (nutzt dein v2.22 Transcript falls vorhanden)
+            note_text = st.text_area("Bericht / Details", value=st.session_state.get('transcript', ""))
+            
+            # Foto-Upload (Platzhalter für die Logik)
+            photo_file = st.file_uploader("Bild hinzufügen", type=['jpg', 'png', 'jpeg'])
+            
+            # DER BUTTON: Muss EXAKT hier unter dem text_area/file_uploader stehen
+            submit = st.form_submit_button("Eintrag speichern")
+            
+            if submit:
+                if note_text or photo_file:
+                    try:
+                        # Datenbank-Eintrag mit der ECHTEN project_id
+                        supabase.table("notes").insert({
+                            "project_id": selected_proj_id,
+                            "content": note_text,
+                            "user_id": st.session_state.user.id
+                        }).execute()
+                        
+                        st.session_state.transcript = ""
+                        st.success(f"Eintrag für {selected_proj_name} gespeichert!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Fehler: {e}")
+                else:
+                    st.warning("Bitte Text eingeben.")
+
+        # 3. Historie (Außerhalb des Formulars)
+        st.divider()
+        st.subheader(f"Historie: {selected_proj_name}")
+        # ... (Anzeige Logik)
 
         # --- AUDIO & FOTO SEKTION ---
         col1, col2 = st.columns(2)
